@@ -7,6 +7,7 @@ import {
   Agent,
   Provider,
   ResearchTask,
+  SearchSetting,
   Trace,
   TraceSpan,
   UsageRecord,
@@ -14,9 +15,12 @@ import {
 } from '../entities';
 import { computeCost, invokeLlm } from './llm';
 import { renderPdf } from './pdf';
+import { bochaWebSearch, formatSearchResults } from '../search/bocha';
 
 const ResearchState = Annotation.Root({
   productName: Annotation<string>,
+  searchContext: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  references: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
   outline: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
   sections: Annotation<string[]>({
     reducer: (a, b) => a.concat(b),
@@ -34,6 +38,7 @@ export class ResearchService {
     @InjectRepository(Trace) private traces: Repository<Trace>,
     @InjectRepository(TraceSpan) private spans: Repository<TraceSpan>,
     @InjectRepository(UsageRecord) private usage: Repository<UsageRecord>,
+    @InjectRepository(SearchSetting) private searchSettings: Repository<SearchSetting>,
   ) {}
 
   async run(taskId: number) {
@@ -110,8 +115,56 @@ export class ResearchService {
       }
     };
 
+    const searchNode = async (state: typeof ResearchState.State) => {
+      const setting = (await this.searchSettings.find({ take: 1 }))[0];
+      if (!setting?.enabled || !setting.apiKey) return {};
+      const startedAt = new Date();
+      try {
+        const items = await bochaWebSearch(
+          setting.apiKey,
+          `${state.productName} 最新 产品 调研 评测 市场`,
+          setting.resultCount || 8,
+        );
+        const searchContext = formatSearchResults(items);
+        const references = items
+          .map((r, i) => `${i + 1}. [${r.name}](${r.url})`)
+          .join('\n');
+        await this.spans.save(
+          this.spans.create({
+            trace,
+            name: 'web_search(博查AI)',
+            status: 'done',
+            startedAt,
+            endedAt: new Date(),
+            input: state.productName,
+            output: searchContext.slice(0, 4000),
+          }),
+        );
+        return { searchContext, references };
+      } catch (e: any) {
+        await this.spans.save(
+          this.spans.create({
+            trace,
+            name: 'web_search(博查AI)',
+            status: 'failed',
+            startedAt,
+            endedAt: new Date(),
+            input: state.productName,
+            output: String(e?.message ?? e).slice(0, 2000),
+          }),
+        );
+        this.logger.warn(`任务 ${task.id} 搜索失败，降级为无搜索模式: ${e?.message ?? e}`);
+        return {};
+      }
+    };
+
+    const withContext = (state: typeof ResearchState.State) =>
+      state.searchContext
+        ? `\n以下是通过联网搜索获取的最新资料，请优先基于这些资料撰写，并在正文中用 [n] 标注引用：\n${state.searchContext}\n`
+        : '';
+
     const outlineNode = async (state: typeof ResearchState.State) => {
-      const prompt = `${agent.outlinePrompt}\n[OUTLINE]\n产品：${state.productName}\n请直接输出章节标题列表，每行一个，不要编号。`;
+      const prompt = `${agent.outlinePrompt}\n[OUTLINE]\n产品：${state.productName}\n${withContext(state)}请直接输出章节标题列表，每行一个，不要编号。`;
       const text = await callLlm('outline', prompt);
       const outline = text
         .split('\n')
@@ -124,7 +177,7 @@ export class ResearchService {
     const sectionsNode = async (state: typeof ResearchState.State) => {
       const sections: string[] = [];
       for (const title of state.outline) {
-        const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。`;
+        const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${withContext(state)}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。`;
         const text = await callLlm(`section:${title}`, prompt);
         sections.push(`## ${title}\n\n${text}`);
       }
@@ -133,7 +186,10 @@ export class ResearchService {
 
     const composeNode = async (state: typeof ResearchState.State) => {
       const startedAt = new Date();
-      const markdown = state.sections.join('\n\n');
+      let markdown = state.sections.join('\n\n');
+      if (state.references) {
+        markdown += `\n\n## 参考来源\n\n${state.references}`;
+      }
       await this.spans.save(
         this.spans.create({
           trace,
@@ -149,10 +205,12 @@ export class ResearchService {
     };
 
     const graph = new StateGraph(ResearchState)
+      .addNode('web_search', searchNode)
       .addNode('plan_outline', outlineNode)
       .addNode('write_sections', sectionsNode)
       .addNode('compose_report', composeNode)
-      .addEdge(START, 'plan_outline')
+      .addEdge(START, 'web_search')
+      .addEdge('web_search', 'plan_outline')
       .addEdge('plan_outline', 'write_sections')
       .addEdge('write_sections', 'compose_report')
       .addEdge('compose_report', END)

@@ -61,6 +61,24 @@ export class Provider {
   createdAt: Date;
 }
 
+@Entity('search_settings')
+export class SearchSetting {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ default: '' })
+  apiKey: string;
+
+  @Column('int', { default: 8 })
+  resultCount: number;
+
+  @Column({ default: false })
+  enabled: boolean;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
 @Entity('pay_settings')
 export class PaySetting {
   @PrimaryGeneratedColumn()

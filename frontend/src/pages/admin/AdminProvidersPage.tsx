@@ -24,6 +24,86 @@ const empty = {
   active: true,
 }
 
+function SearchConfigSection() {
+  const [cfg, setCfg] = useState<{ apiKey: string; resultCount: number; enabled: boolean } | null>(null)
+  const [msg, setMsg] = useState('')
+  const [testResult, setTestResult] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.get('/admin/search/config').then((r) => setCfg(r.data))
+  }, [])
+
+  if (!cfg) return null
+
+  const save = async () => {
+    setMsg('')
+    setBusy(true)
+    try {
+      const r = await api.put('/admin/search/config', cfg)
+      setCfg(r.data)
+      setMsg('已保存')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const test = async () => {
+    setTestResult('')
+    setBusy(true)
+    try {
+      const r = await api.post('/admin/search/test', { query: '小米SU7 最新' })
+      setTestResult(r.data.ok ? `[√] 搜索正常，返回 ${r.data.count} 条结果` : `[x] ${r.data.message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="section">
+      <div className="section-title">[+] 联网搜索（博查AI）</div>
+      <div className="card">
+        <p className="mute">
+          启用后，智能体调研前会先通过博查AI Web Search 搜索产品最新信息，搜索结果会注入提示词并在报告末尾列出参考来源，搜索过程记入链路追踪。API Key 在 bochaai.com 获取。
+        </p>
+        <label>博查AI API Key</label>
+        <input
+          value={cfg.apiKey}
+          onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
+          placeholder="sk-xxxx（保存后掩码显示）"
+        />
+        <label>每次搜索结果数（1-20）</label>
+        <input
+          type="number"
+          min={1}
+          max={20}
+          value={cfg.resultCount}
+          onChange={(e) => setCfg({ ...cfg, resultCount: Number(e.target.value) })}
+        />
+        <label>
+          <input
+            type="checkbox"
+            style={{ width: 'auto', marginRight: 8 }}
+            checked={cfg.enabled}
+            onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+          />
+          启用联网搜索
+        </label>
+        <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button className="btn" disabled={busy} onClick={save}>
+            保存
+          </button>
+          <button className="btn btn-secondary" disabled={busy} onClick={test}>
+            测试搜索
+          </button>
+          {msg && <span className="status-done">[√] {msg}</span>}
+          {testResult && <span className="mute">{testResult}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminProvidersPage() {
   const [providers, setProviders] = useState<ProviderDto[]>([])
   const [editingId, setEditingId] = useState<number | 'new' | null>(null)
@@ -162,6 +242,8 @@ export default function AdminProvidersPage() {
           ))}
         </tbody>
       </table>
+
+      <SearchConfigSection />
     </div>
   )
 }

@@ -149,39 +149,6 @@ export default function HomePage() {
         )}
       </div>
 
-      <div className="home-row-head">
-        <span>亮点功能</span>
-      </div>
-      <div className="feature-grid">
-        <Link to="/tasks" className="feature-card f-a">
-          <b>调研报告 →</b>
-          <span>PDF 预览 / 下载</span>
-        </Link>
-        <Link to="/plans" className="feature-card f-b">
-          <b>收费套餐 →</b>
-          <span>微信扫码 / 公众号支付</span>
-        </Link>
-        {user?.role === 'admin' && (
-          <>
-            <Link to="/admin/agents" className="feature-card f-c">
-              <b>智能体管理 →</b>
-              <span>提示词后台可编辑</span>
-            </Link>
-            <Link to="/admin/usage" className="feature-card f-d">
-              <b>用量统计 →</b>
-              <span>Token 用量 / 费用</span>
-            </Link>
-            <Link to="/admin/traces" className="feature-card f-e">
-              <b>链路追踪 →</b>
-              <span>LangGraph Trace</span>
-            </Link>
-            <Link to="/admin/providers" className="feature-card f-f">
-              <b>模型供应商 →</b>
-              <span>OpenAI 兼容 API</span>
-            </Link>
-          </>
-        )}
-      </div>
     </div>
   )
 }
