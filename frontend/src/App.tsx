@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage'
 import TasksPage from './pages/TasksPage'
 import TaskDetailPage from './pages/TaskDetailPage'
 import PlansPage from './pages/PlansPage'
+import AccountPage from './pages/AccountPage'
 import AdminAgentsPage from './pages/admin/AdminAgentsPage'
 import AdminProvidersPage from './pages/admin/AdminProvidersPage'
 import AdminUsagePage from './pages/admin/AdminUsagePage'
@@ -41,14 +42,16 @@ function Nav() {
             </>
           )}
           <div className="nav-user-mobile">
-            <span className="mute">{user?.email}</span>
+            <NavLink to="/account" className="mute">
+              {user?.email}
+            </NavLink>
             <button className="btn btn-secondary btn-sm" onClick={logout}>
               退出
             </button>
           </div>
         </div>
         <div className="nav-user">
-          <span>{user?.email}</span>
+          <NavLink to="/account">{user?.email}</NavLink>
           <button className="btn btn-secondary btn-sm" onClick={logout}>
             退出
           </button>
@@ -94,6 +97,7 @@ export default function App() {
       <Route path="/tasks" element={<Protected><TasksPage /></Protected>} />
       <Route path="/tasks/:id" element={<Protected><TaskDetailPage /></Protected>} />
       <Route path="/plans" element={<Protected><PlansPage /></Protected>} />
+      <Route path="/account" element={<Protected><AccountPage /></Protected>} />
       <Route path="/admin/agents" element={<Protected admin><AdminAgentsPage /></Protected>} />
       <Route path="/admin/providers" element={<Protected admin><AdminProvidersPage /></Protected>} />
       <Route path="/admin/usage" element={<Protected admin><AdminUsagePage /></Protected>} />

@@ -99,6 +99,15 @@ a {
   white-space: nowrap;
   flex-shrink: 0;
 }
+.nav-user a {
+  color: var(--mute);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.nav-user a:hover,
+.nav-user a.active {
+  color: var(--ink);
+}
 .nav-toggle {
   display: none;
   background: transparent;

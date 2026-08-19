@@ -33,6 +33,16 @@ export class AuthService {
     return this.sign(user);
   }
 
+  async changePassword(userId: number, oldPassword: string, newPassword: string) {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user || !(await bcrypt.compare(oldPassword, user.passwordHash))) {
+      throw new UnauthorizedException('当前密码错误');
+    }
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.users.save(user);
+    return { ok: true };
+  }
+
   private sign(user: User) {
     return {
       token: this.jwt.sign({ sub: user.id, email: user.email, role: user.role }),
