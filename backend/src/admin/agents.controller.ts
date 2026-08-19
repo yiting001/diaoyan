@@ -1,0 +1,64 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Agent, Provider } from '../entities';
+import { AdminGuard, JwtAuthGuard } from '../auth/guards';
+
+@Controller('admin/agents')
+@UseGuards(JwtAuthGuard, AdminGuard)
+export class AgentsController {
+  constructor(
+    @InjectRepository(Agent) private agents: Repository<Agent>,
+    @InjectRepository(Provider) private providers: Repository<Provider>,
+  ) {}
+
+  @Get()
+  list() {
+    return this.agents.find({ order: { id: 'DESC' } });
+  }
+
+  @Post()
+  async create(@Body() body: any) {
+    const agent = this.agents.create(await this.fromBody(body));
+    return this.agents.save(agent);
+  }
+
+  @Put(':id')
+  async update(@Param('id') id: number, @Body() body: any) {
+    const agent = await this.agents.findOneBy({ id });
+    if (!agent) throw new NotFoundException();
+    Object.assign(agent, await this.fromBody(body));
+    return this.agents.save(agent);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: number) {
+    await this.agents.delete(id);
+    return { ok: true };
+  }
+
+  private async fromBody(body: any): Promise<Partial<Agent>> {
+    const provider = body.providerId
+      ? await this.providers.findOneBy({ id: body.providerId })
+      : null;
+    return {
+      name: body.name,
+      description: body.description ?? '',
+      systemPrompt: body.systemPrompt ?? '',
+      outlinePrompt: body.outlinePrompt ?? '',
+      sectionPrompt: body.sectionPrompt ?? '',
+      active: body.active ?? true,
+      provider,
+    };
+  }
+}
