@@ -12,6 +12,7 @@ import AdminUsagePage from './pages/admin/AdminUsagePage'
 import AdminTracesPage from './pages/admin/AdminTracesPage'
 import AdminPlansPage from './pages/admin/AdminPlansPage'
 import AdminPayPage from './pages/admin/AdminPayPage'
+import AdminUsersPage from './pages/admin/AdminUsersPage'
 
 function Nav() {
   const user = currentUser()
@@ -36,6 +37,7 @@ function Nav() {
               <NavLink to="/admin/traces">链路追踪</NavLink>
               <NavLink to="/admin/plans">套餐管理</NavLink>
               <NavLink to="/admin/pay">支付配置</NavLink>
+              <NavLink to="/admin/users">用户管理</NavLink>
             </>
           )}
           <div className="nav-user-mobile">
@@ -86,6 +88,7 @@ export default function App() {
       <Route path="/admin/traces" element={<Protected admin><AdminTracesPage /></Protected>} />
       <Route path="/admin/plans" element={<Protected admin><AdminPlansPage /></Protected>} />
       <Route path="/admin/pay" element={<Protected admin><AdminPayPage /></Protected>} />
+      <Route path="/admin/users" element={<Protected admin><AdminUsersPage /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

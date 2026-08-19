@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Provider } from '../entities';
+import { Agent, Provider, UsageRecord } from '../entities';
 import { AdminGuard, JwtAuthGuard } from '../auth/guards';
 
 function masked(p: Provider) {
@@ -21,7 +21,11 @@ function masked(p: Provider) {
 @Controller('admin/providers')
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class ProvidersController {
-  constructor(@InjectRepository(Provider) private providers: Repository<Provider>) {}
+  constructor(
+    @InjectRepository(Provider) private providers: Repository<Provider>,
+    @InjectRepository(Agent) private agents: Repository<Agent>,
+    @InjectRepository(UsageRecord) private usage: Repository<UsageRecord>,
+  ) {}
 
   @Get()
   async list() {
@@ -55,6 +59,19 @@ export class ProvidersController {
 
   @Delete(':id')
   async remove(@Param('id') id: number) {
+    // 先解除智能体和用量记录对该供应商的引用，避免外键冲突
+    await this.agents
+      .createQueryBuilder()
+      .update()
+      .set({ provider: null })
+      .where('providerId = :id', { id })
+      .execute();
+    await this.usage
+      .createQueryBuilder()
+      .update()
+      .set({ provider: null })
+      .where('providerId = :id', { id })
+      .execute();
     await this.providers.delete(id);
     return { ok: true };
   }

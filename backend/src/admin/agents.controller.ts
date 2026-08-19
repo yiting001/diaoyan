@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Agent, Provider } from '../entities';
+import { Agent, Provider, ResearchTask } from '../entities';
 import { AdminGuard, JwtAuthGuard } from '../auth/guards';
 
 @Controller('admin/agents')
@@ -20,6 +20,7 @@ export class AgentsController {
   constructor(
     @InjectRepository(Agent) private agents: Repository<Agent>,
     @InjectRepository(Provider) private providers: Repository<Provider>,
+    @InjectRepository(ResearchTask) private tasks: Repository<ResearchTask>,
   ) {}
 
   @Get()
@@ -43,6 +44,13 @@ export class AgentsController {
 
   @Delete(':id')
   async remove(@Param('id') id: number) {
+    // 先解除历史任务对该智能体的引用，避免外键冲突
+    await this.tasks
+      .createQueryBuilder()
+      .update()
+      .set({ agent: null })
+      .where('agentId = :id', { id })
+      .execute();
     await this.agents.delete(id);
     return { ok: true };
   }

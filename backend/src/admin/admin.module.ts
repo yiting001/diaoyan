@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Agent, Plan, Provider, Subscription, Trace, UsageRecord, ResearchTask, User } from '../entities';
+import { Agent, PaymentOrder, Plan, Provider, Subscription, Trace, UsageRecord, ResearchTask, User } from '../entities';
+import { UsersController } from './users.controller';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { AdminSubscriptionsController } from './subscriptions.controller';
 import { AgentsController } from './agents.controller';
@@ -11,7 +12,7 @@ import { TracesController } from './traces.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Agent, Provider, Plan, UsageRecord, Trace, ResearchTask, Subscription, User]),
+    TypeOrmModule.forFeature([Agent, Provider, Plan, UsageRecord, Trace, ResearchTask, Subscription, User, PaymentOrder]),
     SubscriptionsModule,
   ],
   controllers: [
@@ -21,6 +22,7 @@ import { TracesController } from './traces.controller';
     UsageController,
     TracesController,
     AdminSubscriptionsController,
+    UsersController,
   ],
 })
 export class AdminModule {}
