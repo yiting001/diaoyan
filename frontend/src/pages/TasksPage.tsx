@@ -48,8 +48,6 @@ export default function TasksPage() {
             <th>产品</th>
             <th>智能体</th>
             <th>状态</th>
-            <th>Tokens</th>
-            <th>费用($)</th>
             <th>时间</th>
             <th></th>
           </tr>
@@ -61,12 +59,6 @@ export default function TasksPage() {
               <td>{t.productName}</td>
               <td>{t.agentName}</td>
               <td className={`status-${t.status}`}>{statusLabels[t.status] ?? t.status}</td>
-              <td>
-                {t.inputTokens + t.outputTokens > 0
-                  ? `${t.inputTokens}↑ ${t.outputTokens}↓`
-                  : '-'}
-              </td>
-              <td>{t.cost ? t.cost.toFixed(6) : '-'}</td>
               <td className="mute">{new Date(t.createdAt).toLocaleString('zh-CN')}</td>
               <td>
                 <Link to={`/tasks/${t.id}`}>查看 →</Link>
@@ -75,7 +67,7 @@ export default function TasksPage() {
           ))}
           {tasks.length === 0 && (
             <tr>
-              <td colSpan={8} className="mute">
+              <td colSpan={6} className="mute">
                 暂无任务，去首页提交一个产品调研吧。
               </td>
             </tr>
