@@ -1,5 +1,33 @@
 # 凡夫价投智能体 部署文档
 
+## 方式一：Docker 部署（推荐，agent.fanfu.xyz 当前采用）
+
+仓库已含 `docker-compose.yml`、`backend/Dockerfile`（含 Chromium 与中文字体）、`frontend/Dockerfile`（nginx 静态 + /api 反代）。容器只监听 `127.0.0.1:8180`，TLS 由宿主机 nginx 终结。
+
+```bash
+# 1. 上传代码到服务器 /opt/diaoyan，创建 .env
+cd /opt/diaoyan
+echo "JWT_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > .env
+
+# 2. 构建并启动（数据持久化在 ./data）
+docker compose build
+docker compose up -d
+```
+
+宿主机 nginx 配置 `agent.fanfu.xyz`：80 端口放行 `/.well-known/acme-challenge/`（webroot 如 `/www/wwwroot/acme`）并 301 到 https；443 端口用 Let's Encrypt 证书，`proxy_pass http://127.0.0.1:8180`，务必带 `proxy_buffering off; proxy_read_timeout 600s;`（SSE 流式进度需要）。
+
+证书签发与自动续期（certbot Docker 镜像，凌晨 cron 续期后 reload nginx）：
+
+```bash
+docker run --rm -v /www/server/letsencrypt:/etc/letsencrypt -v /www/wwwroot/acme:/www/wwwroot/acme \
+  certbot/certbot certonly --webroot -w /www/wwwroot/acme -d agent.fanfu.xyz \
+  --agree-tos --register-unsafely-without-email --non-interactive
+```
+
+升级：上传新代码后 `docker compose build && docker compose up -d`。
+
+## 方式二：裸机部署
+
 本项目为前后端分离结构：
 
 - `backend/`：NestJS API（端口默认 3000，全部接口前缀 `/api`），SQLite 数据库，Puppeteer 生成 PDF
