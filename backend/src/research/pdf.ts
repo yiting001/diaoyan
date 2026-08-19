@@ -52,7 +52,8 @@ export function buildReportHtml(title: string, markdown: string): string {
   body { font-family: "Noto Sans CJK SC", "WenQuanYi Zen Hei", sans-serif; color: #201d1d; margin: 0; line-height: 1.85; font-size: 13px; }
 
   .cover { height: 96vh; display: flex; flex-direction: column; justify-content: center; page-break-after: always; padding: 0 24px; }
-  .cover .brand { font-size: 14px; letter-spacing: 4px; color: #646262; margin-bottom: 36px; }
+  .cover .brand { font-size: 14px; letter-spacing: 4px; color: #646262; margin-bottom: 12px; }
+  .cover .slogan { font-size: 13px; letter-spacing: 2px; color: #9a9691; margin-bottom: 36px; }
   .cover h1 { font-size: 34px; line-height: 1.4; margin: 0 0 20px; border: none; }
   .cover .rule { width: 64px; height: 4px; background: #201d1d; margin-bottom: 28px; }
   .cover .meta { color: #646262; font-size: 13px; line-height: 2.2; }
@@ -77,10 +78,14 @@ export function buildReportHtml(title: string, markdown: string): string {
   .content code { background: #f0ece5; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
   .content a { color: #1a4d8f; text-decoration: none; word-break: break-all; }
   .content hr { border: none; border-top: 1px solid #d8d4cf; margin: 20px 0; }
+
+  .closing { margin: 40px 24px 24px; padding: 16px 18px; border: 1px solid #d8d4cf; background: #faf8f4; color: #4a4744; font-size: 12px; line-height: 2; page-break-inside: avoid; }
+  .closing .closing-title { font-weight: bold; color: #201d1d; margin-bottom: 6px; }
 </style></head>
 <body>
 <div class="cover">
   <div class="brand">凡夫价投智能体</div>
+  <div class="slogan">企业战略和价值投资双重视角</div>
   <h1>${escapeHtml(title)}</h1>
   <div class="rule"></div>
   <div class="meta">
@@ -95,6 +100,11 @@ export function buildReportHtml(title: string, markdown: string): string {
 </div>
 <div class="content">
 ${body}
+</div>
+<div class="closing">
+  <div class="closing-title">免责声明</div>
+  本智能体输出调研报告仅为客观信息分析，不构成任何投资建议，投资有风险，决策请自行负责。<br>
+  更多企业深度调研沟通请联系：fangfushangye
 </div>
 </body></html>`;
 }
