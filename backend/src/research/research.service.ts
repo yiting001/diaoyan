@@ -144,6 +144,38 @@ export class ResearchService {
       this.streamListeners.get(task.id)?.forEach((fn) => fn(e));
     };
 
+    // 限流/超时自动重试：全并行时遇到 429/限流就指数退避等待，直到完成
+    const isRetryable = (e: any) => {
+      const msg = String(e?.message ?? e).toLowerCase();
+      return (
+        e?.status === 429 ||
+        e?.status === 503 ||
+        msg.includes('429') ||
+        msg.includes('rate limit') ||
+        msg.includes('too many requests') ||
+        msg.includes('overloaded') ||
+        msg.includes('timeout') ||
+        msg.includes('限流') ||
+        msg.includes('econnreset') ||
+        msg.includes('fetch failed')
+      );
+    };
+    const withRetry = async <T>(fn: () => Promise<T>, label: string): Promise<T> => {
+      for (let attempt = 0; ; attempt++) {
+        checkStopped();
+        try {
+          return await fn();
+        } catch (e) {
+          if (attempt >= 6 || !isRetryable(e)) throw e;
+          const delay = Math.min(60_000, 2000 * 2 ** attempt) + Math.random() * 1000;
+          this.logger.warn(
+            `任务 ${task.id} ${label} 触发限流/网络错误，${Math.round(delay / 1000)}s 后重试（第 ${attempt + 1} 次）: ${String((e as any)?.message ?? e).slice(0, 200)}`,
+          );
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    };
+
     const callLlm = async (nodeName: string, prompt: string) => {
       const startedAt = new Date();
       emitStream({ node: nodeName, channel: 'content', delta: '', reset: true });
@@ -160,10 +192,14 @@ export class ResearchService {
         lastFlush = Date.now();
       };
       try {
-        const res = await invokeLlm(provider, agent.systemPrompt, prompt, (d) => {
-          buf[d.channel] += d.delta;
-          if (Date.now() - lastFlush > 250 || buf[d.channel].length > 200) flush();
-        });
+        const res = await withRetry(
+          () =>
+            invokeLlm(provider, agent.systemPrompt, prompt, (d) => {
+              buf[d.channel] += d.delta;
+              if (Date.now() - lastFlush > 250 || buf[d.channel].length > 200) flush();
+            }),
+          nodeName,
+        );
         flush();
         totalIn += res.inputTokens;
         totalOut += res.outputTokens;
@@ -241,9 +277,13 @@ export class ResearchService {
       if (!searchEnabled) return [];
       const startedAt = new Date();
       try {
-        const { items } = await webSearch(
-          { ...searchSetting, resultCount: count ?? searchSetting.resultCount },
-          query,
+        const { items } = await withRetry(
+          () =>
+            webSearch(
+              { ...searchSetting, resultCount: count ?? searchSetting.resultCount },
+              query,
+            ),
+          spanName,
         );
         addRefs(items);
         await this.spans.save(
@@ -416,34 +456,14 @@ export class ResearchService {
       return `## ${title}\n\n${stripDuplicateTitle(title, text)}`;
     };
 
-    // 多子智能体并行撰写各章节（限并发，避免触发模型/搜索限流），主智能体按大纲顺序合并
-    const SECTION_CONCURRENCY = 4;
-
+    // 主智能体按大纲为每个章节开一个子智能体全并行执行，限流时自动退避重试，完成后按顺序合并
     const sectionsNode = async (state: typeof ResearchState.State) => {
       const total = state.outline.length;
-      await progress(
-        'section',
-        `启动 ${Math.min(SECTION_CONCURRENCY, total)} 路并行子智能体，共 ${total} 个章节…`,
+      await progress('section', `主智能体启动 ${total} 个并行子智能体，每章一个，同时开始调研…`);
+      const results = await Promise.all(
+        state.outline.map((title, idx) => writeSection(state, title, idx, total)),
       );
-      const results: string[] = new Array(total);
-      let next = 0;
-      let firstError: unknown = null;
-      const worker = async () => {
-        while (next < total) {
-          if (firstError) return;
-          const idx = next++;
-          try {
-            results[idx] = await writeSection(state, state.outline[idx], idx, total);
-          } catch (e) {
-            firstError = firstError ?? e;
-            return;
-          }
-        }
-      };
-      await Promise.all(
-        Array.from({ length: Math.min(SECTION_CONCURRENCY, total) }, () => worker()),
-      );
-      if (firstError) throw firstError;
+      await progress('section', `全部 ${total} 个子智能体完成，主智能体正在按顺序合并章节…`, 'done');
       return { sections: results };
     };
 
