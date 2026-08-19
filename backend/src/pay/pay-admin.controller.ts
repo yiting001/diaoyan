@@ -104,24 +104,52 @@ export class PayAdminController {
     const cfg = await this.pay.getConfig();
 
     if (files.p12?.[0]) {
-      const candidates = [...new Set([body.p12Password, cfg.mchId, ''].filter((v) => v !== undefined))] as string[];
-      let parsed: { privateKeyPem: string; certPem: string } | null = null;
-      let lastError = '';
-      for (const password of candidates) {
-        try {
-          parsed = parseP12(files.p12[0].buffer, password);
-          break;
-        } catch (e) {
-          lastError = (e as Error).message;
+      const buf = files.p12[0].buffer;
+      const head = buf.subarray(0, 256).toString('utf8');
+      if (head.includes('-----BEGIN')) {
+        // 用户把 PEM 文件传到了 p12 横栏，直接按 PEM 处理
+        const pem = buf.toString('utf8');
+        if (pem.includes('PRIVATE KEY')) cfg.privateKeyPem = pem;
+        const certMatch = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/);
+        if (certMatch) cfg.certPem = `${certMatch[0]}\n`;
+        if (!pem.includes('PRIVATE KEY') && !certMatch) {
+          throw new BadRequestException('上传的文件是 PEM 格式但未包含私钥或证书，请确认文件内容');
         }
-      }
-      if (!parsed) {
+      } else if (buf[0] !== 0x30) {
         throw new BadRequestException(
-          `p12 解析失败：密码不正确或文件格式不受支持（${lastError}）。p12 密码通常为商户号；若仍失败，请改用「PEM 私钥 apiclient_key.pem + 证书 apiclient_cert.pem」方式上传`,
+          '上传的文件不是有效的 p12/PKCS#12 格式。请确认选择的是证书压缩包解压后的 apiclient_cert.p12 文件（注意不要直接上传 zip 压缩包）',
         );
+      } else {
+        const candidates = [
+          ...new Set(
+            [body.p12Password?.trim(), body.p12Password, cfg.mchId?.trim(), ''].filter(
+              (v): v is string => v !== undefined && v !== null,
+            ),
+          ),
+        ];
+        let parsed: { privateKeyPem: string; certPem: string } | null = null;
+        let lastError = '';
+        const diagnostics: string[] = [];
+        for (const password of candidates) {
+          try {
+            parsed = parseP12(buf, password, diagnostics);
+            break;
+          } catch (e) {
+            lastError = (e as Error).message;
+          }
+        }
+        if (!parsed) {
+          const diag = [...new Set(diagnostics)].slice(0, 2).join('；');
+          throw new BadRequestException(
+            `p12 解析失败：密码不正确（已尝试：您填写的密码、商户号「${cfg.mchId || '未填写'}」、空密码）。` +
+              `微信官方规定 p12 证书密码为商户号（mch_id），请先在左侧填写并保存正确的商户号后再上传，或在密码框直接填入商户号。` +
+              `若仍失败，请改用证书压缩包里的「apiclient_key.pem + apiclient_cert.pem」方式上传（无需密码，推荐）。` +
+              `（技术详情：${diag || lastError}）`,
+          );
+        }
+        cfg.privateKeyPem = parsed.privateKeyPem;
+        if (parsed.certPem) cfg.certPem = parsed.certPem;
       }
-      cfg.privateKeyPem = parsed.privateKeyPem;
-      if (parsed.certPem) cfg.certPem = parsed.certPem;
     }
 
     if (files.privateKey?.[0]) {

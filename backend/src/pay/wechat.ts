@@ -157,17 +157,28 @@ export function serialFromCertPem(certPem: string): string {
 function parseP12WithOpenssl(
   p12Buffer: Buffer,
   password: string,
+  diagnostics?: string[],
 ): { privateKeyPem: string; certPem: string } | null {
   const tmpFile = path.join(os.tmpdir(), `wxp12-${crypto.randomBytes(8).toString('hex')}.p12`);
   try {
     fs.writeFileSync(tmpFile, p12Buffer, { mode: 0o600 });
-    for (const extraArgs of [[], ['-legacy']]) {
+    for (const extraArgs of [[], ['-legacy'], ['-nomacver']]) {
       const res = spawnSync(
         'openssl',
         ['pkcs12', '-in', tmpFile, '-nodes', '-passin', 'env:WX_P12_PASS', ...extraArgs],
         { env: { ...process.env, WX_P12_PASS: password }, encoding: 'utf8', timeout: 15_000 },
       );
-      if (res.status !== 0 || !res.stdout) continue;
+      if (res.error && (res.error as NodeJS.ErrnoException).code === 'ENOENT') {
+        diagnostics?.push('服务器未安装 openssl');
+        return null;
+      }
+      if (res.status !== 0 || !res.stdout) {
+        const errLine = (res.stderr || '')
+          .split('\n')
+          .find((l) => l.includes('error') || l.includes('Error'));
+        if (errLine) diagnostics?.push(errLine.trim());
+        continue;
+      }
       const keyMatch = res.stdout.match(
         /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC )?PRIVATE KEY-----/,
       );
@@ -190,12 +201,12 @@ function parseP12WithOpenssl(
   }
 }
 
-// 解析 p12 (PKCS#12) 证书文件，提取私钥与证书 PEM。微信商户 p12 密码通常是商户号
-export function parseP12(p12Buffer: Buffer, password: string): {
+// 解析 p12 (PKCS#12) 证书文件，提取私钥与证书 PEM。微信官方规定 p12 密码为商户号（mch_id）
+export function parseP12(p12Buffer: Buffer, password: string, diagnostics?: string[]): {
   privateKeyPem: string;
   certPem: string;
 } {
-  const viaOpenssl = parseP12WithOpenssl(p12Buffer, password);
+  const viaOpenssl = parseP12WithOpenssl(p12Buffer, password, diagnostics);
   if (viaOpenssl) return viaOpenssl;
   const p12Asn1 = forge.asn1.fromDer(forge.util.createBuffer(p12Buffer.toString('binary')));
   const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);
