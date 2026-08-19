@@ -358,62 +358,93 @@ export class ResearchService {
 
     const MISSING_MARK = '未获取到公开数据';
 
-    const sectionsNode = async (state: typeof ResearchState.State) => {
-      const sections: string[] = [];
-      for (let i = 0; i < state.outline.length; i++) {
-        const title = state.outline[i];
-        const keywords = titleKeywords(title);
-        checkStopped();
-        // 每章先按本章主题定向搜索，避免只依赖首轮泛搜索导致具体指标缺数据
-        let sectionContext = '';
-        if (searchEnabled && keywords) {
-          await progress('web_search', `正在定向搜索「${keywords}」相关最新资料…`);
-          const items = await doSearch(
-            `search:${title}`,
-            `${state.productName} ${keywords} 最新数据`,
-            6,
-          );
-          if (items.length > 0) sectionContext = formatRefs(items);
-        }
-        checkStopped();
-        await progress('section', `正在撰写第 ${i + 1}/${state.outline.length} 章：${title}…`);
-        const baseContext =
-          withContext(state) +
-          (sectionContext
-            ? `\n以下是针对本章主题定向搜索到的最新资料，请优先采用：\n${sectionContext}\n`
-            : '');
-        const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${baseContext}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。只有在搜索资料和公开信息中确实找不到时才标注「${MISSING_MARK}」。`;
-        let text = await callLlm(`section:${title}`, prompt);
-
-        // 若正文仍标注缺数据，针对缺失项生成补搜查询并重写一次
-        if (searchEnabled && text.includes(MISSING_MARK)) {
-          checkStopped();
-          const queriesText = await callLlm(
-            `missing_queries:${title}`,
-            `以下是「${state.productName}」调研报告中「${title}」章节的草稿，其中部分数据标注了「${MISSING_MARK}」。请针对这些缺失的数据项，输出最多 4 条用于联网搜索的中文查询词（每行一条，含企业名和具体指标名，不要序号和其他说明）：\n\n${text.slice(0, 3000)}`,
-          );
-          const queries = queriesText
-            .split('\n')
-            .map((l) => l.replace(/^[-*\d.\s．、]+/, '').trim())
-            .filter(Boolean)
-            .slice(0, 4);
-          const extra: SearchResultItem[] = [];
-          for (const q of queries) {
-            checkStopped();
-            await progress('web_search', `检测到缺失数据，正在补充搜索：${q}…`);
-            extra.push(...(await doSearch(`research:${title}`, q, 5)));
-          }
-          if (extra.length > 0) {
-            await progress('section', `根据补充资料重新完善第 ${i + 1} 章「${title}」…`);
-            const rewritePrompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${baseContext}\n以下是针对缺失数据补充搜索到的资料：\n${formatRefs(extra)}\n\n这是上一版草稿（部分数据标注了「${MISSING_MARK}」）：\n${text}\n\n请结合补充资料重新输出该章节完整内容（Markdown 格式，不要重复章节标题），尽量用补充资料中的真实数据替换「${MISSING_MARK}」，确实找不到的才保留标注。`;
-            text = await callLlm(`section_rewrite:${title}`, rewritePrompt);
-          }
-        }
-
-        sections.push(`## ${title}\n\n${stripDuplicateTitle(title, text)}`);
-        await progress('section', `第 ${i + 1}/${state.outline.length} 章「${title}」撰写完成`, 'done');
+    // 单章子智能体：定向搜索 → 撰写 → 缺数据补搜重写
+    const writeSection = async (
+      state: typeof ResearchState.State,
+      title: string,
+      i: number,
+      total: number,
+    ): Promise<string> => {
+      const keywords = titleKeywords(title);
+      checkStopped();
+      let sectionContext = '';
+      if (searchEnabled && keywords) {
+        await progress('web_search', `[子智能体 ${i + 1}] 正在定向搜索「${keywords}」相关最新资料…`);
+        const items = await doSearch(
+          `search:${title}`,
+          `${state.productName} ${keywords} 最新数据`,
+          6,
+        );
+        if (items.length > 0) sectionContext = formatRefs(items);
       }
-      return { sections };
+      checkStopped();
+      await progress('section', `[子智能体 ${i + 1}] 正在撰写第 ${i + 1}/${total} 章：${title}…`);
+      const baseContext =
+        withContext(state) +
+        (sectionContext
+          ? `\n以下是针对本章主题定向搜索到的最新资料，请优先采用：\n${sectionContext}\n`
+          : '');
+      const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${baseContext}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。只有在搜索资料和公开信息中确实找不到时才标注「${MISSING_MARK}」。`;
+      let text = await callLlm(`section:${title}`, prompt);
+
+      // 若正文仍标注缺数据，针对缺失项生成补搜查询并重写一次
+      if (searchEnabled && text.includes(MISSING_MARK)) {
+        checkStopped();
+        const queriesText = await callLlm(
+          `missing_queries:${title}`,
+          `以下是「${state.productName}」调研报告中「${title}」章节的草稿，其中部分数据标注了「${MISSING_MARK}」。请针对这些缺失的数据项，输出最多 4 条用于联网搜索的中文查询词（每行一条，含企业名和具体指标名，不要序号和其他说明）：\n\n${text.slice(0, 3000)}`,
+        );
+        const queries = queriesText
+          .split('\n')
+          .map((l) => l.replace(/^[-*\d.\s．、]+/, '').trim())
+          .filter(Boolean)
+          .slice(0, 4);
+        const extra: SearchResultItem[] = [];
+        for (const q of queries) {
+          checkStopped();
+          await progress('web_search', `[子智能体 ${i + 1}] 检测到缺失数据，正在补充搜索：${q}…`);
+          extra.push(...(await doSearch(`research:${title}`, q, 5)));
+        }
+        if (extra.length > 0) {
+          await progress('section', `[子智能体 ${i + 1}] 根据补充资料重新完善「${title}」…`);
+          const rewritePrompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${baseContext}\n以下是针对缺失数据补充搜索到的资料：\n${formatRefs(extra)}\n\n这是上一版草稿（部分数据标注了「${MISSING_MARK}」）：\n${text}\n\n请结合补充资料重新输出该章节完整内容（Markdown 格式，不要重复章节标题），尽量用补充资料中的真实数据替换「${MISSING_MARK}」，确实找不到的才保留标注。`;
+          text = await callLlm(`section_rewrite:${title}`, rewritePrompt);
+        }
+      }
+
+      await progress('section', `[子智能体 ${i + 1}] 第 ${i + 1}/${total} 章「${title}」撰写完成`, 'done');
+      return `## ${title}\n\n${stripDuplicateTitle(title, text)}`;
+    };
+
+    // 多子智能体并行撰写各章节（限并发，避免触发模型/搜索限流），主智能体按大纲顺序合并
+    const SECTION_CONCURRENCY = 4;
+
+    const sectionsNode = async (state: typeof ResearchState.State) => {
+      const total = state.outline.length;
+      await progress(
+        'section',
+        `启动 ${Math.min(SECTION_CONCURRENCY, total)} 路并行子智能体，共 ${total} 个章节…`,
+      );
+      const results: string[] = new Array(total);
+      let next = 0;
+      let firstError: unknown = null;
+      const worker = async () => {
+        while (next < total) {
+          if (firstError) return;
+          const idx = next++;
+          try {
+            results[idx] = await writeSection(state, state.outline[idx], idx, total);
+          } catch (e) {
+            firstError = firstError ?? e;
+            return;
+          }
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(SECTION_CONCURRENCY, total) }, () => worker()),
+      );
+      if (firstError) throw firstError;
+      return { sections: results };
     };
 
     const composeNode = async (state: typeof ResearchState.State) => {
