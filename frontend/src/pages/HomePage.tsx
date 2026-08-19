@@ -35,6 +35,7 @@ export default function HomePage() {
   const [tasks, setTasks] = useState<TaskDto[]>([])
   const [error, setError] = useState('')
   const [needPlan, setNeedPlan] = useState(false)
+  const [needLogin, setNeedLogin] = useState(false)
   const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const navigate = useNavigate()
@@ -56,6 +57,12 @@ export default function HomePage() {
     if (!selected || !productName.trim() || loading) return
     setError('')
     setNeedPlan(false)
+    setNeedLogin(false)
+    if (!user || user.isGuest) {
+      setError('请先注册登录后再生成报告')
+      setNeedLogin(true)
+      return
+    }
     setLoading(true)
     try {
       const res = await api.post('/tasks', {
@@ -65,8 +72,12 @@ export default function HomePage() {
       })
       navigate(`/tasks/${res.data.id}`)
     } catch (err: any) {
-      setError(err.response?.data?.message ?? '提交失败')
-      setNeedPlan(err.response?.status === 403)
+      const msg = err.response?.data?.message ?? '提交失败'
+      setError(msg)
+      if (err.response?.status === 403) {
+        if (String(msg).includes('登录')) setNeedLogin(true)
+        else setNeedPlan(true)
+      }
       setLoading(false)
     }
   }
@@ -92,7 +103,7 @@ export default function HomePage() {
           value={productName}
           onChange={(e) => setProductName(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="输入要调研的品牌或公司，智能体自动调研并生成报告，例如：小米、五粮液、宁德时代…"
+          placeholder="输入需要调研的上市公司准确名称或者代码信息"
         />
         <div className="prompt-toolbar">
           <div className="prompt-tools">
@@ -178,6 +189,12 @@ export default function HomePage() {
             <>
               {' '}
               <Link to="/plans">去购买套餐 →</Link>
+            </>
+          )}
+          {needLogin && (
+            <>
+              {' '}
+              <Link to="/login">去登录 / 注册 →</Link>
             </>
           )}
         </div>

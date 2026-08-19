@@ -21,8 +21,6 @@ import { JwtAuthGuard } from '../auth/guards';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { ResearchService } from './research.service';
 
-// 无套餐用户可免费生成的报告数量（仅可预览开头，付费后解锁全文）
-const FREE_TASK_LIMIT = 3;
 // 未解锁报告可预览的正文字符数
 const PREVIEW_CHARS = 600;
 
@@ -96,24 +94,19 @@ export class TasksController {
     if (!provider && !agent.provider) {
       throw new BadRequestException('请选择模型（该智能体未配置默认模型）');
     }
+    if (req.user.isGuest) {
+      throw new ForbiddenException('请先注册登录后再生成报告');
+    }
     const user = await this.users.findOneBy({ id: req.user.id });
-    if (!user) throw new NotFoundException();
+    if (!user || user.isGuest) throw new ForbiddenException('请先注册登录后再生成报告');
     let usedCredit = false;
-    let unlocked = true;
+    const unlocked = true;
     if (user.role !== 'admin') {
       const consumed = await this.subscriptions.tryConsumeForTask(user.id);
       if (consumed === null) {
-        // 无套餐：允许免费生成但仅可预览开头，付费后解锁全文
-        const freeCount = await this.tasks.count({
-          where: { user: { id: user.id }, unlocked: false },
-        });
-        if (freeCount >= FREE_TASK_LIMIT) {
-          throw new ForbiddenException('免费体验次数已用完，请购买套餐后继续使用');
-        }
-        unlocked = false;
-      } else {
-        usedCredit = consumed;
+        throw new ForbiddenException('请先购买套餐后再生成报告');
       }
+      usedCredit = consumed;
     }
     const task = await this.tasks.save(
       this.tasks.create({
