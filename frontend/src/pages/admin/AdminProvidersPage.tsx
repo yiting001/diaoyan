@@ -156,7 +156,6 @@ export default function AdminProvidersPage() {
               <label>类型</label>
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                 <option value="openai-compatible">OpenAI 兼容 API</option>
-                <option value="mock">Mock（演示用，无需 Key）</option>
               </select>
               <label>Base URL（如 https://api.openai.com/v1、https://api.deepseek.com）</label>
               <input value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />

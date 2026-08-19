@@ -9,7 +9,7 @@ NestJS + LangChain + LangGraph + SQLite 的全栈应用：用户选择后台配�
 - PDF 在线预览（iframe）与下载
 - 后台管理：
   - 智能体 CRUD，系统/大纲/章节提示词可编辑
-  - 模型供应商管理（OpenAI 兼容 API：baseUrl / apiKey / model / 输入输出单价；内置 Mock 供应商无需 Key 即可演示）
+  - 模型供应商管理（OpenAI 兼容 API：baseUrl / apiKey / model / 输入输出单价）
   - Token 用量统计：总量、按模型、按用户、明细，费用按供应商单价自动计算
   - 链路追踪：每次任务一条 Trace，LangGraph 各节点（含每次 LLM 调用与 PDF 渲染）记录为 Span（输入/输出/token/耗时）
   - 套餐管理：按次收费、按年付费、按年+Token 计价、按次+Token 计价

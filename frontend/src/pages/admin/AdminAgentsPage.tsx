@@ -119,7 +119,7 @@ export default function AdminAgentsPage() {
             <option value={0}>-- 未配置 --</option>
             {providers.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}（{p.type === 'mock' ? 'mock' : p.model}）
+                {p.name}（{p.model}）
               </option>
             ))}
           </select>

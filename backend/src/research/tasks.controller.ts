@@ -39,7 +39,7 @@ export class TasksController {
           id: a.id,
           name: a.name,
           description: a.description,
-          model: a.provider ? (a.provider.type === 'mock' ? 'mock' : a.provider.model) : null,
+          model: a.provider?.model ?? null,
         })),
       );
   }

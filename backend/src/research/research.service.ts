@@ -92,7 +92,7 @@ export class ResearchService {
             user,
             provider,
             taskId: task.id,
-            model: provider.type === 'mock' ? 'mock' : provider.model,
+            model: provider.model,
             inputTokens: res.inputTokens,
             outputTokens: res.outputTokens,
             cost: computeCost(provider, res.inputTokens, res.outputTokens),

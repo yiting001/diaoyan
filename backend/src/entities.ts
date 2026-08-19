@@ -34,7 +34,7 @@ export class Provider {
   @Column()
   name: string;
 
-  // 'openai-compatible' | 'mock'
+  // 'openai-compatible'
   @Column({ default: 'openai-compatible' })
   type: string;
 
