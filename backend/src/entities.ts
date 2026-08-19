@@ -70,8 +70,20 @@ export class SearchSetting {
   @PrimaryGeneratedColumn()
   id: number;
 
+  // 搜索源：bocha（博查AI）| doubao（豆包/火山引擎联网搜索）
+  @Column({ default: 'bocha' })
+  provider: string;
+
   @Column({ default: '' })
   apiKey: string;
+
+  // 豆包联网搜索 API Key
+  @Column({ default: '' })
+  doubaoApiKey: string;
+
+  // 时效范围：oneMonth | oneYear | noLimit（最新优先）
+  @Column({ default: 'oneYear' })
+  freshness: string;
 
   @Column('int', { default: 8 })
   resultCount: number;
@@ -252,6 +264,10 @@ export class ResearchTask {
 
   @ManyToOne(() => Agent, { eager: true, nullable: true })
   agent: Agent | null;
+
+  // 本次任务选择的模型供应商（未选时回退到智能体默认供应商）
+  @ManyToOne(() => Provider, { eager: true, nullable: true })
+  provider: Provider | null;
 
   @Column()
   productName: string;

@@ -8,6 +8,7 @@ export interface TaskDto {
   status: string
   error: string
   agentName: string
+  model: string
   inputTokens: number
   outputTokens: number
   cost: number

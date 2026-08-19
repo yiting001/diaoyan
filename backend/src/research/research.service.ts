@@ -16,7 +16,7 @@ import {
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { computeCost, invokeLlm } from './llm';
 import { renderPdf } from './pdf';
-import { bochaWebSearch, formatSearchResults } from '../search/bocha';
+import { formatSearchResults, webSearch } from '../search/bocha';
 
 export interface ProgressEvent {
   time: string;
@@ -80,17 +80,17 @@ export class ResearchService {
 
   async run(taskId: number) {
     const task = await this.tasks.findOne({ where: { id: taskId } });
-    if (!task || !task.agent?.provider) {
+    if (!task || !task.agent || (!task.provider && !task.agent.provider)) {
       if (task) {
         task.status = 'failed';
-        task.error = '智能体未配置模型供应商';
+        task.error = '未选择模型且智能体未配置默认模型供应商';
         await this.refundIfUsed(task);
         await this.tasks.save(task);
       }
       return;
     }
     const agent = task.agent as Agent;
-    const provider = agent.provider as Provider;
+    const provider = (task.provider ?? agent.provider) as Provider;
     const user = task.user as User;
 
     const trace = await this.traces.save(
@@ -172,14 +172,16 @@ export class ResearchService {
 
     const searchNode = async (state: typeof ResearchState.State) => {
       const setting = (await this.searchSettings.find({ take: 1 }))[0];
-      if (!setting?.enabled || !setting.apiKey) return {};
+      if (!setting?.enabled) return {};
+      const activeKey = setting.provider === 'doubao' ? setting.doubaoApiKey : setting.apiKey;
+      if (!activeKey) return {};
+      const providerName = setting.provider === 'doubao' ? '豆包搜索' : '博查AI';
       const startedAt = new Date();
-      await progress('web_search', '正在联网搜索最新资料（博查AI）…');
+      await progress('web_search', `正在联网搜索最新资料（${providerName}，最新优先）…`);
       try {
-        const items = await bochaWebSearch(
-          setting.apiKey,
+        const { items } = await webSearch(
+          setting,
           `${state.productName} 最新 产品 调研 评测 市场`,
-          setting.resultCount || 8,
         );
         const searchContext = formatSearchResults(items);
         const references = items
@@ -188,7 +190,7 @@ export class ResearchService {
         await this.spans.save(
           this.spans.create({
             trace,
-            name: 'web_search(博查AI)',
+            name: `web_search(${providerName})`,
             status: 'done',
             startedAt,
             endedAt: new Date(),
@@ -202,7 +204,7 @@ export class ResearchService {
         await this.spans.save(
           this.spans.create({
             trace,
-            name: 'web_search(博查AI)',
+            name: `web_search(${providerName})`,
             status: 'failed',
             startedAt,
             endedAt: new Date(),
@@ -218,7 +220,7 @@ export class ResearchService {
 
     const withContext = (state: typeof ResearchState.State) =>
       state.searchContext
-        ? `\n以下是通过联网搜索获取的最新资料，请优先基于这些资料撰写，并在正文中用 [n] 标注引用：\n${state.searchContext}\n`
+        ? `\n以下是通过联网搜索获取的最新资料（已按发布时间最新优先排序），请优先采用时间最新的数据撰写，并在正文中用 [n] 标注引用：\n${state.searchContext}\n`
         : '';
 
     // 去掉模型在章节正文开头重复输出的章节标题（报告合成时已统一加标题）

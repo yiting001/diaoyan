@@ -10,6 +10,12 @@ interface AgentDto {
   model: string | null
 }
 
+interface ModelDto {
+  id: number
+  name: string
+  model: string
+}
+
 function greeting(): string {
   const h = new Date().getHours()
   if (h < 6) return '凌晨好'
@@ -22,6 +28,9 @@ export default function HomePage() {
   const [agents, setAgents] = useState<AgentDto[]>([])
   const [selected, setSelected] = useState<number | null>(null)
   const [agentOpen, setAgentOpen] = useState(false)
+  const [models, setModels] = useState<ModelDto[]>([])
+  const [modelId, setModelId] = useState<number | null>(null)
+  const [modelOpen, setModelOpen] = useState(false)
   const [productName, setProductName] = useState('')
   const [tasks, setTasks] = useState<TaskDto[]>([])
   const [error, setError] = useState('')
@@ -36,10 +45,12 @@ export default function HomePage() {
       setAgents(r.data)
       if (r.data.length > 0) setSelected(r.data[0].id)
     })
+    api.get('/models').then((r) => setModels(r.data)).catch(() => setModels([]))
     api.get('/tasks').then((r) => setTasks(r.data.slice(0, 8)))
   }, [])
 
   const selectedAgent = agents.find((a) => a.id === selected)
+  const selectedModel = models.find((m) => m.id === modelId)
 
   const submit = async () => {
     if (!selected || !productName.trim() || loading) return
@@ -47,7 +58,11 @@ export default function HomePage() {
     setNeedPlan(false)
     setLoading(true)
     try {
-      const res = await api.post('/tasks', { agentId: selected, productName: productName.trim() })
+      const res = await api.post('/tasks', {
+        agentId: selected,
+        productName: productName.trim(),
+        ...(modelId ? { providerId: modelId } : {}),
+      })
       navigate(`/tasks/${res.data.id}`)
     } catch (err: any) {
       setError(err.response?.data?.message ?? '提交失败')
@@ -108,7 +123,42 @@ export default function HomePage() {
                 </div>
               )}
             </div>
-            {selectedAgent?.model && <span className="badge light">{selectedAgent.model}</span>}
+            <div className="prompt-chip-wrap">
+              <button
+                type="button"
+                className="prompt-chip"
+                onClick={() => setModelOpen((v) => !v)}
+              >
+                ◈ {selectedModel ? selectedModel.name : selectedAgent?.model ? `默认（${selectedAgent.model}）` : '选择模型'} ▾
+              </button>
+              {modelOpen && (
+                <div className="prompt-menu">
+                  <div
+                    className="prompt-menu-item"
+                    onClick={() => {
+                      setModelId(null)
+                      setModelOpen(false)
+                    }}
+                  >
+                    <span>{modelId === null ? '[x]' : '[ ]'}</span> <b>智能体默认模型</b>
+                    {selectedAgent?.model && <span className="mute"> {selectedAgent.model}</span>}
+                  </div>
+                  {models.map((m) => (
+                    <div
+                      key={m.id}
+                      className="prompt-menu-item"
+                      onClick={() => {
+                        setModelId(m.id)
+                        setModelOpen(false)
+                      }}
+                    >
+                      <span>{modelId === m.id ? '[x]' : '[ ]'}</span> <b>{m.name}</b>
+                      <span className="mute"> {m.model}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <button
             type="button"

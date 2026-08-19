@@ -16,7 +16,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Response } from 'express';
 import * as fs from 'fs';
-import { Agent, Plan, ResearchTask, User } from '../entities';
+import { Agent, Plan, Provider, ResearchTask, User } from '../entities';
 import { JwtAuthGuard } from '../auth/guards';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { ResearchService } from './research.service';
@@ -32,6 +32,7 @@ export class TasksController {
   constructor(
     @InjectRepository(ResearchTask) private tasks: Repository<ResearchTask>,
     @InjectRepository(Agent) private agents: Repository<Agent>,
+    @InjectRepository(Provider) private providers: Repository<Provider>,
     @InjectRepository(User) private users: Repository<User>,
     @InjectRepository(Plan) private plans: Repository<Plan>,
     private research: ResearchService,
@@ -50,6 +51,14 @@ export class TasksController {
           model: a.provider?.model ?? null,
         })),
       );
+  }
+
+  // 可供用户选择的模型列表（不暴露 apiKey/baseUrl）
+  @Get('models')
+  listModels() {
+    return this.providers
+      .find({ where: { active: true }, order: { id: 'ASC' } })
+      .then((list) => list.map((p) => ({ id: p.id, name: p.name, model: p.model })));
   }
 
   @Get('plans')
@@ -72,10 +81,21 @@ export class TasksController {
   }
 
   @Post('tasks')
-  async createTask(@Req() req: any, @Body() body: { agentId: number; productName: string }) {
+  async createTask(
+    @Req() req: any,
+    @Body() body: { agentId: number; productName: string; providerId?: number },
+  ) {
     if (!body.productName?.trim()) throw new BadRequestException('请输入产品名称');
     const agent = await this.agents.findOneBy({ id: body.agentId, active: true });
     if (!agent) throw new NotFoundException('智能体不存在');
+    let provider: Provider | null = null;
+    if (body.providerId) {
+      provider = await this.providers.findOneBy({ id: body.providerId, active: true });
+      if (!provider) throw new NotFoundException('所选模型不存在或已停用');
+    }
+    if (!provider && !agent.provider) {
+      throw new BadRequestException('请选择模型（该智能体未配置默认模型）');
+    }
     const user = await this.users.findOneBy({ id: req.user.id });
     if (!user) throw new NotFoundException();
     let usedCredit = false;
@@ -99,6 +119,7 @@ export class TasksController {
       this.tasks.create({
         user,
         agent,
+        provider,
         productName: body.productName.trim(),
         usedCredit,
         unlocked,
@@ -223,6 +244,7 @@ export class TasksController {
       status: t.status,
       error: t.error,
       agentName: t.agent?.name ?? '',
+      model: t.provider?.model ?? t.agent?.provider?.model ?? '',
       inputTokens: t.inputTokens,
       outputTokens: t.outputTokens,
       cost: t.cost,

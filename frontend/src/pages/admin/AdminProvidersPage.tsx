@@ -24,8 +24,17 @@ const empty = {
   active: true,
 }
 
+interface SearchCfg {
+  provider: string
+  apiKey: string
+  doubaoApiKey: string
+  freshness: string
+  resultCount: number
+  enabled: boolean
+}
+
 function SearchConfigSection() {
-  const [cfg, setCfg] = useState<{ apiKey: string; resultCount: number; enabled: boolean } | null>(null)
+  const [cfg, setCfg] = useState<SearchCfg | null>(null)
   const [msg, setMsg] = useState('')
   const [testResult, setTestResult] = useState('')
   const [busy, setBusy] = useState(false)
@@ -53,7 +62,11 @@ function SearchConfigSection() {
     setBusy(true)
     try {
       const r = await api.post('/admin/search/test', { query: '小米SU7 最新' })
-      setTestResult(r.data.ok ? `[√] 搜索正常，返回 ${r.data.count} 条结果` : `[x] ${r.data.message}`)
+      setTestResult(
+        r.data.ok
+          ? `[√] ${r.data.provider ?? '搜索'}正常，返回 ${r.data.count} 条结果`
+          : `[x] ${r.data.message}`,
+      )
     } finally {
       setBusy(false)
     }
@@ -61,17 +74,36 @@ function SearchConfigSection() {
 
   return (
     <div className="section">
-      <div className="section-title">[+] 联网搜索（博查AI）</div>
+      <div className="section-title">[+] 联网搜索（最新数据优先）</div>
       <div className="card">
         <p className="mute">
-          启用后，智能体调研前会先通过博查AI Web Search 搜索产品最新信息，搜索结果会注入提示词并在报告末尾列出参考来源，搜索过程记入链路追踪。API Key 在 bochaai.com 获取。
+          启用后，智能体调研前会先联网搜索产品最新信息（结果按发布时间最新优先排序），搜索结果会注入提示词并在报告末尾列出参考来源，搜索过程记入链路追踪。
         </p>
+        <label>搜索源</label>
+        <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
+          <option value="bocha">博查AI（bochaai.com）</option>
+          <option value="doubao">豆包搜索（feedcoopapi.com）</option>
+        </select>
         <label>博查AI API Key</label>
         <input
           value={cfg.apiKey}
           onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
           placeholder="sk-xxxx（保存后掩码显示）"
         />
+        <label>豆包搜索 API Key</label>
+        <input
+          value={cfg.doubaoApiKey}
+          onChange={(e) => setCfg({ ...cfg, doubaoApiKey: e.target.value })}
+          placeholder="豆包（火山引擎）联网搜索 API Key（保存后掩码显示）"
+        />
+        <label>时效范围（最新优先）</label>
+        <select value={cfg.freshness} onChange={(e) => setCfg({ ...cfg, freshness: e.target.value })}>
+          <option value="oneDay">最近 24 小时</option>
+          <option value="oneWeek">最近一周</option>
+          <option value="oneMonth">最近一个月</option>
+          <option value="oneYear">最近一年</option>
+          <option value="noLimit">不限（仍按最新排序）</option>
+        </select>
         <label>每次搜索结果数（1-20）</label>
         <input
           type="number"

@@ -108,6 +108,7 @@ export default function TaskDetailPage() {
           状态：<b className={`status-${task.status}`}>{statusLabels[task.status] ?? task.status}</b>
         </span>
         <span>智能体：{task.agentName}</span>
+        {task.model && <span>模型：{task.model}</span>}
         <span>
           Tokens：{task.inputTokens}↑ {task.outputTokens}↓
         </span>
