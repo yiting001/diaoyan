@@ -17,6 +17,7 @@ import { Response } from 'express';
 import * as fs from 'fs';
 import { Agent, Plan, ResearchTask, User } from '../entities';
 import { JwtAuthGuard } from '../auth/guards';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { ResearchService } from './research.service';
 
 @Controller()
@@ -28,6 +29,7 @@ export class TasksController {
     @InjectRepository(User) private users: Repository<User>,
     @InjectRepository(Plan) private plans: Repository<Plan>,
     private research: ResearchService,
+    private subscriptions: SubscriptionsService,
   ) {}
 
   @Get('agents')
@@ -49,6 +51,11 @@ export class TasksController {
     return this.plans.find({ where: { active: true }, order: { id: 'ASC' } });
   }
 
+  @Get('me/subscription')
+  mySubscription(@Req() req: any) {
+    return this.subscriptions.summary(req.user.id);
+  }
+
   @Get('tasks')
   async listTasks(@Req() req: any) {
     const list = await this.tasks.find({
@@ -65,8 +72,10 @@ export class TasksController {
     if (!agent) throw new NotFoundException('智能体不存在');
     const user = await this.users.findOneBy({ id: req.user.id });
     if (!user) throw new NotFoundException();
+    const usedCredit =
+      user.role === 'admin' ? false : await this.subscriptions.consumeForTask(user.id);
     const task = await this.tasks.save(
-      this.tasks.create({ user, agent, productName: body.productName.trim() }),
+      this.tasks.create({ user, agent, productName: body.productName.trim(), usedCredit }),
     );
     void this.research.run(task.id).catch(() => undefined);
     return this.dto(task);

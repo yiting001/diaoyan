@@ -11,16 +11,43 @@ const empty = {
   active: true,
 }
 
+interface SubRow {
+  id: number
+  email: string
+  remainingUses: number
+  expiresAt: string | null
+  updatedAt: string
+}
+
 export default function AdminPlansPage() {
   const [plans, setPlans] = useState<PlanDto[]>([])
   const [editingId, setEditingId] = useState<number | 'new' | null>(null)
   const [form, setForm] = useState({ ...empty })
   const [error, setError] = useState('')
+  const [subs, setSubs] = useState<SubRow[]>([])
+  const [grantEmail, setGrantEmail] = useState('')
+  const [grantPlanId, setGrantPlanId] = useState<number | ''>('')
+  const [grantMsg, setGrantMsg] = useState('')
 
   const load = () => api.get('/admin/plans').then((r) => setPlans(r.data))
+  const loadSubs = () => api.get('/admin/subscriptions').then((r) => setSubs(r.data))
   useEffect(() => {
     load()
+    loadSubs()
   }, [])
+
+  const grant = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGrantMsg('')
+    try {
+      await api.post('/admin/subscriptions/grant', { email: grantEmail, planId: grantPlanId })
+      setGrantMsg('[√] 开通成功')
+      setGrantEmail('')
+      loadSubs()
+    } catch (err: any) {
+      setGrantMsg(`[x] ${err.response?.data?.message ?? '开通失败'}`)
+    }
+  }
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -159,6 +186,67 @@ export default function AdminPlansPage() {
               </td>
             </tr>
           ))}
+        </tbody>
+      </table>
+
+      <div className="section-title" style={{ marginTop: 32 }}>[+] 用户套餐权益</div>
+      <form className="card soft" onSubmit={grant}>
+        <label>手动开通套餐（等同于支付成功一次：按次套餐 +1 次，年度套餐延长一年）</label>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <input
+            style={{ flex: 2, minWidth: 200 }}
+            placeholder="用户邮箱"
+            value={grantEmail}
+            onChange={(e) => setGrantEmail(e.target.value)}
+            required
+          />
+          <select
+            style={{ flex: 1, minWidth: 160 }}
+            value={grantPlanId}
+            onChange={(e) => setGrantPlanId(Number(e.target.value))}
+            required
+          >
+            <option value="" disabled>
+              选择套餐
+            </option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}（{billingTypeLabels[p.billingType] ?? p.billingType}）
+              </option>
+            ))}
+          </select>
+          <button className="btn">开通</button>
+        </div>
+        {grantMsg && <p className={grantMsg.startsWith('[x]') ? 'error' : 'status-done'}>{grantMsg}</p>}
+      </form>
+
+      <table style={{ marginTop: 16 }}>
+        <thead>
+          <tr>
+            <th>用户</th>
+            <th>剩余次数</th>
+            <th>年度到期</th>
+            <th>更新时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          {subs.map((s) => (
+            <tr key={s.id}>
+              <td>{s.email}</td>
+              <td>{s.remainingUses}</td>
+              <td>
+                {s.expiresAt ? new Date(s.expiresAt).toLocaleDateString('zh-CN') : '-'}
+              </td>
+              <td>{new Date(s.updatedAt).toLocaleString('zh-CN')}</td>
+            </tr>
+          ))}
+          {subs.length === 0 && (
+            <tr>
+              <td colSpan={4} className="mute">
+                暂无用户套餐记录
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

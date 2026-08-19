@@ -38,10 +38,17 @@ interface OrderDto {
   codeUrl: string
 }
 
+interface SubscriptionDto {
+  remainingUses: number
+  expiresAt: string | null
+  yearlyActive: boolean
+}
+
 const isWeChat = /MicroMessenger/i.test(navigator.userAgent)
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<PlanDto[]>([])
+  const [sub, setSub] = useState<SubscriptionDto | null>(null)
   const [order, setOrder] = useState<OrderDto | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [error, setError] = useState('')
@@ -49,8 +56,13 @@ export default function PlansPage() {
   const [params, setParams] = useSearchParams()
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const loadSub = () => {
+    api.get('/me/subscription').then((r) => setSub(r.data))
+  }
+
   useEffect(() => {
     api.get('/plans').then((r) => setPlans(r.data))
+    loadSub()
   }, [])
 
   // 微信内 OAuth 回跳：携带 openid + planId，直接发起 JSAPI 支付
@@ -77,6 +89,7 @@ export default function PlansPage() {
       if (r.data.status !== 'pending') {
         setOrder(r.data)
         if (pollRef.current) clearInterval(pollRef.current)
+        if (r.data.status === 'paid') loadSub()
       }
     }, 3000)
   }
@@ -139,6 +152,18 @@ export default function PlansPage() {
   return (
     <div className="section">
       <div className="section-title">[+] 收费套餐</div>
+      {sub && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <b>我的套餐</b>
+          <p className="mute" style={{ margin: '8px 0 0' }}>
+            {sub.yearlyActive && sub.expiresAt
+              ? `[√] 年度套餐有效，到期时间：${new Date(sub.expiresAt).toLocaleDateString('zh-CN')}`
+              : '[ ] 暂无有效年度套餐'}
+            {' · '}剩余按次额度：{sub.remainingUses} 次
+            {!sub.yearlyActive && sub.remainingUses === 0 && '（购买套餐后才能使用智能体）'}
+          </p>
+        </div>
+      )}
       {error && <div className="error">[x] {error}</div>}
 
       {order && (

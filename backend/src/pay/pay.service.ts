@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { PaymentOrder, PaySetting, Plan, User } from '../entities';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import {
   buildJsapiPayParams,
   decryptResource,
@@ -21,6 +22,7 @@ export class PayService {
     @InjectRepository(PaySetting) private settings: Repository<PaySetting>,
     @InjectRepository(PaymentOrder) private orders: Repository<PaymentOrder>,
     @InjectRepository(Plan) private plans: Repository<Plan>,
+    private subscriptions: SubscriptionsService,
   ) {}
 
   async getConfig(): Promise<PaySetting> {
@@ -118,6 +120,7 @@ export class PayService {
     if (status === 200 && data.trade_state) {
       this.applyTradeState(order, data);
       await this.orders.save(order);
+      await this.grantIfPaid(order);
     }
     return order;
   }
@@ -151,8 +154,17 @@ export class PayService {
     if (order && order.status === 'pending') {
       this.applyTradeState(order, data);
       await this.orders.save(order);
+      await this.grantIfPaid(order);
     }
     return { code: 'SUCCESS', message: '成功' };
+  }
+
+  // 支付成功后发放套餐权益（幂等，避免回调与主动查询重复发放）
+  private async grantIfPaid(order: PaymentOrder) {
+    if (order.status !== 'paid' || order.granted || !order.plan) return;
+    await this.subscriptions.grant(order.user.id, order.plan);
+    order.granted = true;
+    await this.orders.save(order);
   }
 
   // 微信公众号网页授权：code 换 openid

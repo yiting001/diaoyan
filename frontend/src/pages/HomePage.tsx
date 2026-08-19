@@ -25,6 +25,7 @@ export default function HomePage() {
   const [productName, setProductName] = useState('')
   const [tasks, setTasks] = useState<TaskDto[]>([])
   const [error, setError] = useState('')
+  const [needPlan, setNeedPlan] = useState(false)
   const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const navigate = useNavigate()
@@ -43,12 +44,14 @@ export default function HomePage() {
   const submit = async () => {
     if (!selected || !productName.trim() || loading) return
     setError('')
+    setNeedPlan(false)
     setLoading(true)
     try {
       const res = await api.post('/tasks', { agentId: selected, productName: productName.trim() })
       navigate(`/tasks/${res.data.id}`)
     } catch (err: any) {
       setError(err.response?.data?.message ?? '提交失败')
+      setNeedPlan(err.response?.status === 403)
       setLoading(false)
     }
   }
@@ -117,7 +120,17 @@ export default function HomePage() {
           </button>
         </div>
       </div>
-      {error && <div className="error" style={{ textAlign: 'center' }}>[x] {error}</div>}
+      {error && (
+        <div className="error" style={{ textAlign: 'center' }}>
+          [x] {error}
+          {needPlan && (
+            <>
+              {' '}
+              <Link to="/plans">去购买套餐 →</Link>
+            </>
+          )}
+        </div>
+      )}
       <div className="home-hint">enter 提交 · shift+enter 换行 · 生成 PDF 报告可预览下载</div>
 
       <div className="home-row-head">

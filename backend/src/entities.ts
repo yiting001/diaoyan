@@ -163,6 +163,33 @@ export class PaymentOrder {
   @Column('datetime', { nullable: true })
   paidAt: Date | null;
 
+  // 支付成功后是否已发放套餐权益
+  @Column({ default: false })
+  granted: boolean;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+@Entity('subscriptions')
+export class Subscription {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @ManyToOne(() => User, { eager: true })
+  user: User;
+
+  // 剩余按次调用次数（per_use / per_use_plus_token 套餐购买后累加）
+  @Column('int', { default: 0 })
+  remainingUses: number;
+
+  // 年度套餐到期时间（yearly / yearly_plus_token 套餐购买后延长一年）
+  @Column('datetime', { nullable: true })
+  expiresAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -233,6 +260,10 @@ export class ResearchTask {
 
   @Column({ default: '' })
   pdfPath: string;
+
+  // 本任务是否消耗了一次按次套餐额度（失败/停止时退回）
+  @Column({ default: false })
+  usedCredit: boolean;
 
   @Column('int', { default: 0 })
   inputTokens: number;

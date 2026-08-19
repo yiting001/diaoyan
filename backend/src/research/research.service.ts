@@ -13,6 +13,7 @@ import {
   UsageRecord,
   User,
 } from '../entities';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { computeCost, invokeLlm } from './llm';
 import { renderPdf } from './pdf';
 import { bochaWebSearch, formatSearchResults } from '../search/bocha';
@@ -54,7 +55,15 @@ export class ResearchService {
     @InjectRepository(TraceSpan) private spans: Repository<TraceSpan>,
     @InjectRepository(UsageRecord) private usage: Repository<UsageRecord>,
     @InjectRepository(SearchSetting) private searchSettings: Repository<SearchSetting>,
+    private subscriptions: SubscriptionsService,
   ) {}
+
+  // 任务未成功结束时退回已消耗的按次额度
+  private async refundIfUsed(task: ResearchTask) {
+    if (!task.usedCredit) return;
+    task.usedCredit = false;
+    await this.subscriptions.refundCredit(task.user.id);
+  }
 
   subscribe(taskId: number, fn: (e: ProgressEvent) => void) {
     if (!this.listeners.has(taskId)) this.listeners.set(taskId, new Set());
@@ -75,6 +84,7 @@ export class ResearchService {
       if (task) {
         task.status = 'failed';
         task.error = '智能体未配置模型供应商';
+        await this.refundIfUsed(task);
         await this.tasks.save(task);
       }
       return;
@@ -314,6 +324,7 @@ export class ResearchService {
       task.cost = computeCost(provider, totalIn, totalOut);
       if (e instanceof TaskStoppedError) {
         task.status = 'stopped';
+        await this.refundIfUsed(task);
         await this.tasks.save(task);
         await progress('stopped', '任务已按用户请求停止', 'stopped');
         trace.status = 'stopped';
@@ -321,6 +332,7 @@ export class ResearchService {
         this.logger.error(`任务 ${task.id} 失败: ${e?.message ?? e}`);
         task.status = 'failed';
         task.error = String(e?.message ?? e).slice(0, 500);
+        await this.refundIfUsed(task);
         await this.tasks.save(task);
         await progress('failed', `调研失败：${task.error}`, 'failed');
         trace.status = 'failed';
