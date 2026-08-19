@@ -25,6 +25,13 @@ export interface ProgressEvent {
   status: 'running' | 'done' | 'failed' | 'stopped';
 }
 
+export interface StreamEvent {
+  node: string;
+  channel: 'reasoning' | 'content';
+  delta: string;
+  reset?: boolean;
+}
+
 class TaskStoppedError extends Error {
   constructor() {
     super('任务已被用户停止');
@@ -47,6 +54,7 @@ const ResearchState = Annotation.Root({
 export class ResearchService {
   private logger = new Logger(ResearchService.name);
   private listeners = new Map<number, Set<(e: ProgressEvent) => void>>();
+  private streamListeners = new Map<number, Set<(e: StreamEvent) => void>>();
   private stopRequests = new Set<number>();
 
   constructor(
@@ -71,6 +79,15 @@ export class ResearchService {
     return () => {
       this.listeners.get(taskId)?.delete(fn);
       if (this.listeners.get(taskId)?.size === 0) this.listeners.delete(taskId);
+    };
+  }
+
+  subscribeStream(taskId: number, fn: (e: StreamEvent) => void) {
+    if (!this.streamListeners.has(taskId)) this.streamListeners.set(taskId, new Set());
+    this.streamListeners.get(taskId)!.add(fn);
+    return () => {
+      this.streamListeners.get(taskId)?.delete(fn);
+      if (this.streamListeners.get(taskId)?.size === 0) this.streamListeners.delete(taskId);
     };
   }
 
@@ -123,10 +140,31 @@ export class ResearchService {
       if (this.stopRequests.has(task.id)) throw new TaskStoppedError();
     };
 
+    const emitStream = (e: StreamEvent) => {
+      this.streamListeners.get(task.id)?.forEach((fn) => fn(e));
+    };
+
     const callLlm = async (nodeName: string, prompt: string) => {
       const startedAt = new Date();
+      emitStream({ node: nodeName, channel: 'content', delta: '', reset: true });
+      // 流式输出按小段合并后推送，避免逐 token 发送过于频繁
+      const buf: Record<'reasoning' | 'content', string> = { reasoning: '', content: '' };
+      let lastFlush = Date.now();
+      const flush = () => {
+        (['reasoning', 'content'] as const).forEach((ch) => {
+          if (buf[ch]) {
+            emitStream({ node: nodeName, channel: ch, delta: buf[ch] });
+            buf[ch] = '';
+          }
+        });
+        lastFlush = Date.now();
+      };
       try {
-        const res = await invokeLlm(provider, agent.systemPrompt, prompt);
+        const res = await invokeLlm(provider, agent.systemPrompt, prompt, (d) => {
+          buf[d.channel] += d.delta;
+          if (Date.now() - lastFlush > 250 || buf[d.channel].length > 200) flush();
+        });
+        flush();
         totalIn += res.inputTokens;
         totalOut += res.outputTokens;
         await this.spans.save(
@@ -137,7 +175,7 @@ export class ResearchService {
             startedAt,
             endedAt: new Date(),
             input: prompt.slice(0, 2000),
-            output: res.text.slice(0, 4000),
+            output: (res.reasoning ? `【思考过程】\n${res.reasoning.slice(0, 2000)}\n\n【输出】\n` : '') + res.text.slice(0, 4000),
             inputTokens: res.inputTokens,
             outputTokens: res.outputTokens,
           }),
@@ -155,6 +193,7 @@ export class ResearchService {
         );
         return res.text;
       } catch (e: any) {
+        flush();
         await this.spans.save(
           this.spans.create({
             trace,

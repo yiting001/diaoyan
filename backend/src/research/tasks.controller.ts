@@ -191,11 +191,13 @@ export class TasksController {
     }
 
     const unsubscribe = this.research.subscribe(task.id, (e) => send('progress', e));
+    const unsubscribeStream = this.research.subscribeStream(task.id, (e) => send('stream', e));
     const timer = setInterval(() => {
       void this.tasks.findOne({ where: { id: task.id } }).then((t) => {
         if (t && t.status !== 'pending' && t.status !== 'running') {
           clearInterval(timer);
           unsubscribe();
+          unsubscribeStream();
           send('status', this.dto(t));
           res.end();
         }
@@ -204,6 +206,7 @@ export class TasksController {
     res.on('close', () => {
       clearInterval(timer);
       unsubscribe();
+      unsubscribeStream();
     });
   }
 

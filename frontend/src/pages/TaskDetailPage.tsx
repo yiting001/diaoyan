@@ -13,6 +13,16 @@ interface ProgressEvent {
   status: 'running' | 'done' | 'failed' | 'stopped'
 }
 
+interface StreamEvent {
+  node: string
+  channel: 'reasoning' | 'content'
+  delta: string
+  reset?: boolean
+}
+
+const nodeLabel = (node: string) =>
+  node === 'outline' ? '规划大纲' : node.startsWith('section:') ? `撰写「${node.slice(8)}」` : node
+
 const stepIcons: Record<string, string> = {
   start: '[>]',
   web_search: '[@]',
@@ -29,6 +39,9 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<TaskDto | null>(null)
   const [events, setEvents] = useState<ProgressEvent[]>([])
   const [stopping, setStopping] = useState(false)
+  const [stream, setStream] = useState<{ node: string; reasoning: string; content: string } | null>(null)
+  const [showReasoning, setShowReasoning] = useState(true)
+  const streamRef = useRef<HTMLDivElement>(null)
   const [unlocking, setUnlocking] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -53,8 +66,21 @@ export default function TaskDetailPage() {
         prev.some((p) => p.time === ev.time && p.message === ev.message) ? prev : [...prev, ev],
       )
     })
+    es.addEventListener('stream', (e) => {
+      const ev = JSON.parse((e as MessageEvent).data) as StreamEvent
+      setStream((prev) => {
+        if (ev.reset || !prev || prev.node !== ev.node)
+          return { node: ev.node, reasoning: '', content: '' }
+        return {
+          ...prev,
+          reasoning: ev.channel === 'reasoning' ? prev.reasoning + ev.delta : prev.reasoning,
+          content: ev.channel === 'content' ? prev.content + ev.delta : prev.content,
+        }
+      })
+    })
     es.addEventListener('status', (e) => {
       setTask(JSON.parse((e as MessageEvent).data))
+      setStream(null)
       es.close()
     })
     es.onerror = () => {
@@ -67,6 +93,10 @@ export default function TaskDetailPage() {
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight })
   }, [events])
+
+  useEffect(() => {
+    streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight })
+  }, [stream])
 
   if (!task) return <p className="mute">加载中…</p>
 
@@ -138,6 +168,31 @@ export default function TaskDetailPage() {
             </div>
           ))}
           {running && <div className="progress-line progress-running blink">[~] 执行中…</div>}
+        </div>
+      )}
+
+      {running && stream && (stream.reasoning || stream.content) && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <b>[▸] 模型实时输出 · {nodeLabel(stream.node)}</b>
+            {stream.reasoning && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowReasoning((v) => !v)}>
+                {showReasoning ? '隐藏思考过程' : '显示思考过程'}
+              </button>
+            )}
+          </div>
+          <div
+            ref={streamRef}
+            style={{ maxHeight: 300, overflowY: 'auto', marginTop: 8, fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+          >
+            {showReasoning && stream.reasoning && (
+              <div className="mute" style={{ fontStyle: 'italic', borderLeft: '3px solid #ccc', paddingLeft: 8, marginBottom: 8 }}>
+                💭 {stream.reasoning}
+              </div>
+            )}
+            {stream.content}
+            <span className="blink">▍</span>
+          </div>
         </div>
       )}
 
