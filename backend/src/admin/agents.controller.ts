@@ -48,17 +48,18 @@ export class AgentsController {
   }
 
   private async fromBody(body: any): Promise<Partial<Agent>> {
-    const provider = body.providerId
-      ? await this.providers.findOneBy({ id: body.providerId })
-      : null;
-    return {
-      name: body.name,
-      description: body.description ?? '',
-      systemPrompt: body.systemPrompt ?? '',
-      outlinePrompt: body.outlinePrompt ?? '',
-      sectionPrompt: body.sectionPrompt ?? '',
-      active: body.active ?? true,
-      provider,
-    };
+    const patch: Partial<Agent> = {};
+    if (body.name !== undefined) patch.name = body.name;
+    if (body.description !== undefined) patch.description = body.description ?? '';
+    if (body.systemPrompt !== undefined) patch.systemPrompt = body.systemPrompt ?? '';
+    if (body.outlinePrompt !== undefined) patch.outlinePrompt = body.outlinePrompt ?? '';
+    if (body.sectionPrompt !== undefined) patch.sectionPrompt = body.sectionPrompt ?? '';
+    if (body.active !== undefined) patch.active = body.active ?? true;
+    if (body.providerId !== undefined) {
+      patch.provider = body.providerId
+        ? await this.providers.findOneBy({ id: body.providerId })
+        : null;
+    }
+    return patch;
   }
 }
