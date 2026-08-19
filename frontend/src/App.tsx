@@ -61,6 +61,17 @@ function Nav() {
   )
 }
 
+function Footer() {
+  return (
+    <footer className="site-footer">
+      <div className="site-footer-disclaimer">
+        本智能体输出调研报告仅为客观信息分析，不构成任何投资建议，投资有风险，决策请自行负责。
+      </div>
+      <div className="site-footer-contact">更多企业深度调研沟通请联系：fangfushangye</div>
+    </footer>
+  )
+}
+
 function Protected({ children, admin }: { children: React.ReactNode; admin?: boolean }) {
   const user = currentUser()
   const location = useLocation()
@@ -70,6 +81,7 @@ function Protected({ children, admin }: { children: React.ReactNode; admin?: boo
     <>
       <Nav />
       <div className="container">{children}</div>
+      <Footer />
     </>
   )
 }

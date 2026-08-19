@@ -68,6 +68,7 @@ export default function HomePage() {
       <div className="home-greeting">
         {greeting()}，{user?.email?.split('@')[0] ?? '投资者'}！
       </div>
+      <div className="home-tagline">企业战略和价值投资双重视角</div>
 
       <div className="prompt-card">
         <textarea

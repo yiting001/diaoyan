@@ -587,7 +587,24 @@ td {
   text-align: center;
   font-size: 26px;
   font-weight: 700;
-  margin: 48px 0 24px;
+  margin: 48px 0 8px;
+}
+.home-tagline {
+  text-align: center;
+  color: var(--mute);
+  font-size: 15px;
+  letter-spacing: 2px;
+  margin: 0 0 24px;
+}
+.site-footer {
+  max-width: 880px;
+  margin: 40px auto 0;
+  padding: 20px 16px 28px;
+  border-top: 1px solid var(--hairline);
+  text-align: center;
+  color: var(--mute);
+  font-size: 12px;
+  line-height: 1.8;
 }
 .prompt-card {
   border: 1px solid var(--hairline-strong);
@@ -777,6 +794,9 @@ td {
   }
   .home-greeting {
     font-size: 22px;
+    margin: 0 0 6px;
+  }
+  .home-tagline {
     margin: 0 0 20px;
   }
   .home-row-head {

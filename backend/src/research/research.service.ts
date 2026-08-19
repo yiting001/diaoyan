@@ -221,6 +221,31 @@ export class ResearchService {
         ? `\n以下是通过联网搜索获取的最新资料，请优先基于这些资料撰写，并在正文中用 [n] 标注引用：\n${state.searchContext}\n`
         : '';
 
+    // 去掉模型在章节正文开头重复输出的章节标题（报告合成时已统一加标题）
+    const stripDuplicateTitle = (title: string, text: string) => {
+      const norm = (s: string) =>
+        s.replace(/^#+\s*/, '').replace(/[*\s、.．:：（）()【】\[\]-]/g, '');
+      const lines = text.split('\n');
+      let i = 0;
+      while (i < lines.length) {
+        const t = lines[i].trim();
+        if (!t) {
+          i++;
+          continue;
+        }
+        const isHeading = t.startsWith('#');
+        if (
+          norm(t) === norm(title) ||
+          (isHeading && (norm(t).includes(norm(title)) || norm(title).includes(norm(t))))
+        ) {
+          i++;
+          continue;
+        }
+        break;
+      }
+      return lines.slice(i).join('\n').trimStart();
+    };
+
     // 大纲提示词中含 [固定大纲] 标记时，直接使用标记后的章节列表（每行一章），不经模型生成
     const FIXED_OUTLINE_TAG = '[固定大纲]';
 
@@ -257,7 +282,7 @@ export class ResearchService {
         await progress('section', `正在撰写第 ${i + 1}/${state.outline.length} 章：${title}…`);
         const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${withContext(state)}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。`;
         const text = await callLlm(`section:${title}`, prompt);
-        sections.push(`## ${title}\n\n${text}`);
+        sections.push(`## ${title}\n\n${stripDuplicateTitle(title, text)}`);
         await progress('section', `第 ${i + 1}/${state.outline.length} 章「${title}」撰写完成`, 'done');
       }
       return { sections };
