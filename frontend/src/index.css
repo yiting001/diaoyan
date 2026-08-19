@@ -437,6 +437,29 @@ td {
   background: var(--surface-soft);
 }
 
+.pdf-preview {
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-soft);
+}
+
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.pdf-page {
+  display: block;
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
 .auth-box {
   max-width: 420px;
   margin: 64px auto;

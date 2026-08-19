@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../api'
+import PdfPreview from '../components/PdfPreview'
 import { statusLabels, type TaskDto } from './TasksPage'
 
 interface ProgressEvent {
@@ -128,7 +129,7 @@ export default function TaskDetailPage() {
               <button className="btn btn-secondary">新窗口打开</button>
             </a>
           </div>
-          <iframe className="pdf-frame" src={pdfUrl} title="PDF 预览" />
+          <PdfPreview url={`/tasks/${task.id}/pdf`} />
         </>
       )}
     </div>
