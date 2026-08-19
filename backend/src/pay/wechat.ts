@@ -1,4 +1,8 @@
 import * as crypto from 'crypto';
+import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import forge from 'node-forge';
 import { PaySetting } from '../entities';
 
@@ -149,11 +153,50 @@ export function serialFromCertPem(certPem: string): string {
   return cert.serialNumber.toUpperCase();
 }
 
+// 用 openssl CLI 解析 p12（支持旧版 RC2/3DES 加密，需 -legacy）
+function parseP12WithOpenssl(
+  p12Buffer: Buffer,
+  password: string,
+): { privateKeyPem: string; certPem: string } | null {
+  const tmpFile = path.join(os.tmpdir(), `wxp12-${crypto.randomBytes(8).toString('hex')}.p12`);
+  try {
+    fs.writeFileSync(tmpFile, p12Buffer, { mode: 0o600 });
+    for (const extraArgs of [[], ['-legacy']]) {
+      const res = spawnSync(
+        'openssl',
+        ['pkcs12', '-in', tmpFile, '-nodes', '-passin', 'env:WX_P12_PASS', ...extraArgs],
+        { env: { ...process.env, WX_P12_PASS: password }, encoding: 'utf8', timeout: 15_000 },
+      );
+      if (res.status !== 0 || !res.stdout) continue;
+      const keyMatch = res.stdout.match(
+        /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC )?PRIVATE KEY-----/,
+      );
+      const certMatch = res.stdout.match(
+        /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/,
+      );
+      if (keyMatch) {
+        return { privateKeyPem: `${keyMatch[0]}\n`, certPem: certMatch ? `${certMatch[0]}\n` : '' };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    try {
+      fs.unlinkSync(tmpFile);
+    } catch {
+      // 临时文件可能未创建成功
+    }
+  }
+}
+
 // 解析 p12 (PKCS#12) 证书文件，提取私钥与证书 PEM。微信商户 p12 密码通常是商户号
 export function parseP12(p12Buffer: Buffer, password: string): {
   privateKeyPem: string;
   certPem: string;
 } {
+  const viaOpenssl = parseP12WithOpenssl(p12Buffer, password);
+  if (viaOpenssl) return viaOpenssl;
   const p12Asn1 = forge.asn1.fromDer(forge.util.createBuffer(p12Buffer.toString('binary')));
   const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);
   let privateKeyPem = '';
