@@ -61,6 +61,97 @@ export class Provider {
   createdAt: Date;
 }
 
+@Entity('pay_settings')
+export class PaySetting {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  // 公众号 AppID
+  @Column({ default: '' })
+  appId: string;
+
+  // 公众号 AppSecret（JSAPI 网页授权获取 openid 用）
+  @Column({ default: '' })
+  appSecret: string;
+
+  @Column({ default: '' })
+  mchId: string;
+
+  // 商户 API 证书序列号
+  @Column({ default: '' })
+  serialNo: string;
+
+  // 商户 API 私钥（PEM 文本，来自 apiclient_key.pem 或 p12 解析）
+  @Column('text', { default: '' })
+  privateKeyPem: string;
+
+  // 商户 API 证书（PEM 文本）
+  @Column('text', { default: '' })
+  certPem: string;
+
+  // APIv3 密钥（32 位）
+  @Column({ default: '' })
+  apiV3Key: string;
+
+  // 支付结果通知地址（公网可访问）
+  @Column({ default: '' })
+  notifyUrl: string;
+
+  @Column({ default: false })
+  enabled: boolean;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
+@Entity('payment_orders')
+export class PaymentOrder {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @ManyToOne(() => User, { eager: true })
+  user: User;
+
+  @ManyToOne(() => Plan, { eager: true, nullable: true })
+  plan: Plan | null;
+
+  @Column({ unique: true })
+  outTradeNo: string;
+
+  // 金额（分）
+  @Column('int', { default: 0 })
+  amountFen: number;
+
+  // native | jsapi
+  @Column({ default: 'native' })
+  tradeType: string;
+
+  // pending | paid | closed | failed
+  @Column({ default: 'pending' })
+  status: string;
+
+  @Column({ default: '' })
+  codeUrl: string;
+
+  @Column({ default: '' })
+  prepayId: string;
+
+  @Column({ default: '' })
+  transactionId: string;
+
+  @Column({ default: '' })
+  openid: string;
+
+  @Column('datetime', { nullable: true })
+  paidAt: Date | null;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
+
 @Entity('agents')
 export class Agent {
   @PrimaryGeneratedColumn()

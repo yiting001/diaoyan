@@ -11,6 +11,7 @@ import AdminProvidersPage from './pages/admin/AdminProvidersPage'
 import AdminUsagePage from './pages/admin/AdminUsagePage'
 import AdminTracesPage from './pages/admin/AdminTracesPage'
 import AdminPlansPage from './pages/admin/AdminPlansPage'
+import AdminPayPage from './pages/admin/AdminPayPage'
 
 function Nav() {
   const user = currentUser()
@@ -22,7 +23,7 @@ function Nav() {
   return (
     <div className="nav">
       <div className="nav-inner">
-        <span className="wordmark">{'█▀█ █▀▀ █▀ █▀▀ █▀█ █▀█ █▀▀ █░█\n█▀▄ ██▄ ▄█ ██▄ █▀█ █▀▄ █▄▄ █▀█'}</span>
+        <span className="wordmark">凡夫价投智能体</span>
         <div className={`nav-links ${open ? 'open' : ''}`}>
           <NavLink to="/">智能体</NavLink>
           <NavLink to="/tasks">我的报告</NavLink>
@@ -34,6 +35,7 @@ function Nav() {
               <NavLink to="/admin/usage">用量统计</NavLink>
               <NavLink to="/admin/traces">链路追踪</NavLink>
               <NavLink to="/admin/plans">套餐管理</NavLink>
+              <NavLink to="/admin/pay">支付配置</NavLink>
             </>
           )}
           <div className="nav-user-mobile">
@@ -83,6 +85,7 @@ export default function App() {
       <Route path="/admin/usage" element={<Protected admin><AdminUsagePage /></Protected>} />
       <Route path="/admin/traces" element={<Protected admin><AdminTracesPage /></Protected>} />
       <Route path="/admin/plans" element={<Protected admin><AdminPlansPage /></Protected>} />
+      <Route path="/admin/pay" element={<Protected admin><AdminPayPage /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

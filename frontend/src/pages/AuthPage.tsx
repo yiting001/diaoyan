@@ -29,7 +29,7 @@ export default function AuthPage() {
     <div className="auth-box">
       <div className="hero" style={{ textAlign: 'center' }}>
         <div className="wordmark" style={{ fontSize: 14 }}>
-          {'█▀█ █▀▀ █▀ █▀▀ █▀█ █▀█ █▀▀ █░█\n█▀▄ ██▄ ▄█ ██▄ █▀█ █▀▄ █▄▄ █▀█'}
+          凡夫价投智能体
         </div>
         <div className="hint">AI 智能体 · 产品调研 · PDF 报告</div>
       </div>

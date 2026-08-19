@@ -41,7 +41,7 @@ export default function HomePage() {
   return (
     <div>
       <div className="hero">
-        <div style={{ fontSize: 28, fontWeight: 700 }}>AI 智能体产品调研</div>
+        <div style={{ fontSize: 28, fontWeight: 700 }}>凡夫价投智能体</div>
         <div className="prompt-row">
           | 输入产品名称 → 智能体自动调研 → 生成 PDF 报告 [预览/下载]
         </div>

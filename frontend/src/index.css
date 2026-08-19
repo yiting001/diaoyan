@@ -63,10 +63,10 @@ a {
 }
 .wordmark {
   font-weight: 700;
-  white-space: pre;
-  font-size: 12px;
-  line-height: 1.1;
-  letter-spacing: 0;
+  white-space: nowrap;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 2px;
 }
 .nav-links {
   display: flex;
@@ -307,7 +307,7 @@ td {
     padding: 8px 16px;
   }
   .wordmark {
-    font-size: 9px;
+    font-size: 16px;
   }
   .nav-user {
     display: none;
