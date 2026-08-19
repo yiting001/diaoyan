@@ -221,8 +221,22 @@ export class ResearchService {
         ? `\n以下是通过联网搜索获取的最新资料，请优先基于这些资料撰写，并在正文中用 [n] 标注引用：\n${state.searchContext}\n`
         : '';
 
+    // 大纲提示词中含 [固定大纲] 标记时，直接使用标记后的章节列表（每行一章），不经模型生成
+    const FIXED_OUTLINE_TAG = '[固定大纲]';
+
     const outlineNode = async (state: typeof ResearchState.State) => {
       checkStopped();
+      const fixedIdx = (agent.outlinePrompt || '').indexOf(FIXED_OUTLINE_TAG);
+      if (fixedIdx >= 0) {
+        const outline = agent.outlinePrompt
+          .slice(fixedIdx + FIXED_OUTLINE_TAG.length)
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .slice(0, 40);
+        await progress('outline', `使用固定大纲，共 ${outline.length} 个章节：${outline.join('、')}`, 'done');
+        return { outline };
+      }
       await progress('outline', '正在规划报告章节大纲…');
       const prompt = `${agent.outlinePrompt}\n[OUTLINE]\n产品：${state.productName}\n${withContext(state)}请直接输出章节标题列表，每行一个，不要编号。`;
       const text = await callLlm('outline', prompt);

@@ -100,7 +100,7 @@ export default function AdminAgentsPage() {
             value={form.systemPrompt}
             onChange={(v) => setForm({ ...form, systemPrompt: v })}
           />
-          <label>大纲提示词（生成章节大纲）</label>
+          <label>大纲提示词（生成章节大纲；含「[固定大纲]」标记时，其后每行一章严格作为固定章节，不经模型生成）</label>
           <MarkdownTextarea
             rows={4}
             value={form.outlinePrompt}
