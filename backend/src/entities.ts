@@ -111,6 +111,14 @@ export class PaySetting {
   @Column({ default: '' })
   apiV3Key: string;
 
+  // 微信支付公钥ID（PUB_KEY_ID_...，公钥模式验签用）
+  @Column({ default: '' })
+  publicKeyId: string;
+
+  // 微信支付公钥（PEM 文本，pub_key.pem）
+  @Column('text', { default: '' })
+  publicKeyPem: string;
+
   // 支付结果通知地址（公网可访问）
   @Column({ default: '' })
   notifyUrl: string;

@@ -127,10 +127,17 @@ export async function verifyNotifySignature(
   const signature = headers['wechatpay-signature'];
   const serial = headers['wechatpay-serial'];
   if (!timestamp || !nonce || !signature || !serial) return false;
+  const message = `${timestamp}\n${nonce}\n${rawBody}\n`;
+  // 微信支付公钥模式：回调头 Wechatpay-Serial 为公钥ID（PUB_KEY_ID_...）
+  if (cfg.publicKeyPem && (serial === cfg.publicKeyId || serial.startsWith('PUB_KEY_ID_'))) {
+    const verifier = crypto.createVerify('RSA-SHA256');
+    verifier.update(message);
+    return verifier.verify(cfg.publicKeyPem, signature, 'base64');
+  }
+  // 平台证书模式：动态下载平台证书验签
   const certs = await getPlatformCerts(cfg);
   const cert = certs.find((c) => c.serialNo === serial);
   if (!cert) return false;
-  const message = `${timestamp}\n${nonce}\n${rawBody}\n`;
   const verifier = crypto.createVerify('RSA-SHA256');
   verifier.update(message);
   return verifier.verify(cert.publicKeyPem, signature, 'base64');

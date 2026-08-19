@@ -7,10 +7,12 @@ interface PayConfig {
   mchId: string
   serialNo: string
   apiV3Key: string
+  publicKeyId: string
   notifyUrl: string
   enabled: boolean
   hasPrivateKey: boolean
   hasCert: boolean
+  hasPublicKey: boolean
 }
 
 interface AdminOrder {
@@ -41,6 +43,7 @@ export default function AdminPayPage() {
   const [certFile, setCertFile] = useState<File | null>(null)
   const [p12File, setP12File] = useState<File | null>(null)
   const [p12Password, setP12Password] = useState('')
+  const [publicKeyFile, setPublicKeyFile] = useState<File | null>(null)
 
   const load = () => {
     api.get('/admin/pay/config').then((r) => setCfg(r.data))
@@ -63,6 +66,7 @@ export default function AdminPayPage() {
         mchId: cfg.mchId,
         serialNo: cfg.serialNo,
         apiV3Key: cfg.apiV3Key,
+        publicKeyId: cfg.publicKeyId,
         notifyUrl: cfg.notifyUrl,
         enabled: cfg.enabled,
       })
@@ -78,7 +82,7 @@ export default function AdminPayPage() {
   const uploadCerts = async () => {
     setMsg('')
     setError('')
-    if (!privateKeyFile && !certFile && !p12File) {
+    if (!privateKeyFile && !certFile && !p12File && !publicKeyFile) {
       setError('请选择要上传的证书文件')
       return
     }
@@ -87,6 +91,7 @@ export default function AdminPayPage() {
     if (certFile) form.append('cert', certFile)
     if (p12File) form.append('p12', p12File)
     if (p12Password) form.append('p12Password', p12Password)
+    if (publicKeyFile) form.append('publicKey', publicKeyFile)
     setSaving(true)
     try {
       const r = await api.post('/admin/pay/cert', form)
@@ -95,6 +100,7 @@ export default function AdminPayPage() {
       setPrivateKeyFile(null)
       setCertFile(null)
       setP12File(null)
+      setPublicKeyFile(null)
     } catch (err: any) {
       setError(err.response?.data?.message ?? '上传失败')
     } finally {
@@ -123,6 +129,8 @@ export default function AdminPayPage() {
           <input value={cfg.notifyUrl} onChange={(e) => set('notifyUrl', e.target.value)} placeholder="https://your-domain.com/api/pay/notify" />
           <label>证书序列号（上传证书后自动识别，可手动修改）</label>
           <input value={cfg.serialNo} onChange={(e) => set('serialNo', e.target.value)} />
+          <label>微信支付公钥ID（公钥模式，形如 PUB_KEY_ID_...）</label>
+          <input value={cfg.publicKeyId} onChange={(e) => set('publicKeyId', e.target.value)} placeholder="PUB_KEY_ID_0000000000000024101100397200000006" />
           <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input type="checkbox" style={{ width: 'auto' }} checked={cfg.enabled} onChange={(e) => set('enabled', e.target.checked)} />
             启用微信支付
@@ -138,7 +146,8 @@ export default function AdminPayPage() {
           <b>商户证书 / 私钥上传</b>
           <p className="mute">
             当前状态：私钥 {cfg.hasPrivateKey ? '[√] 已配置' : '[x] 未配置'} · 证书{' '}
-            {cfg.hasCert ? '[√] 已配置' : '[x] 未配置'}
+            {cfg.hasCert ? '[√] 已配置' : '[x] 未配置'} · 微信支付公钥{' '}
+            {cfg.hasPublicKey ? '[√] 已配置' : '[x] 未配置'}
           </p>
           <label>方式一：p12 证书文件（apiclient_cert.p12）</label>
           <input type="file" accept=".p12,.pfx" onChange={(e) => setP12File(e.target.files?.[0] ?? null)} />
@@ -148,6 +157,8 @@ export default function AdminPayPage() {
           <input type="file" accept=".pem,.key" onChange={(e) => setPrivateKeyFile(e.target.files?.[0] ?? null)} />
           <label>PEM 证书文件（apiclient_cert.pem）</label>
           <input type="file" accept=".pem,.crt,.cer" onChange={(e) => setCertFile(e.target.files?.[0] ?? null)} />
+          <label style={{ marginTop: 16 }}>微信支付公钥文件（pub_key.pem，公钥模式验签用，配合上方公钥ID）</label>
+          <input type="file" accept=".pem" onChange={(e) => setPublicKeyFile(e.target.files?.[0] ?? null)} />
           <div style={{ marginTop: 16 }}>
             <button className="btn" disabled={saving} onClick={uploadCerts}>
               上传证书

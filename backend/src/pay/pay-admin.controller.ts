@@ -40,10 +40,12 @@ export class PayAdminController {
       mchId: cfg.mchId,
       serialNo: cfg.serialNo,
       apiV3Key: maskTail(cfg.apiV3Key),
+      publicKeyId: cfg.publicKeyId,
       notifyUrl: cfg.notifyUrl,
       enabled: cfg.enabled,
       hasPrivateKey: !!cfg.privateKeyPem,
       hasCert: !!cfg.certPem,
+      hasPublicKey: !!cfg.publicKeyPem,
       updatedAt: cfg.updatedAt,
     };
   }
@@ -57,6 +59,7 @@ export class PayAdminController {
       mchId?: string;
       serialNo?: string;
       apiV3Key?: string;
+      publicKeyId?: string;
       notifyUrl?: string;
       enabled?: boolean;
     },
@@ -71,19 +74,21 @@ export class PayAdminController {
     if (body.apiV3Key !== undefined && !body.apiV3Key.startsWith('••••')) {
       cfg.apiV3Key = body.apiV3Key;
     }
+    if (body.publicKeyId !== undefined) cfg.publicKeyId = body.publicKeyId.trim();
     if (body.notifyUrl !== undefined) cfg.notifyUrl = body.notifyUrl;
     if (body.enabled !== undefined) cfg.enabled = body.enabled;
     await this.settings.save(cfg);
     return this.config();
   }
 
-  // 上传证书文件：privateKey(apiclient_key.pem) / cert(apiclient_cert.pem) / p12(apiclient_cert.p12)
+  // 上传证书文件：privateKey(apiclient_key.pem) / cert(apiclient_cert.pem) / p12(apiclient_cert.p12) / publicKey(pub_key.pem)
   @Post('cert')
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'privateKey', maxCount: 1 },
       { name: 'cert', maxCount: 1 },
       { name: 'p12', maxCount: 1 },
+      { name: 'publicKey', maxCount: 1 },
     ]),
   )
   async uploadCert(
@@ -92,17 +97,31 @@ export class PayAdminController {
       privateKey?: Express.Multer.File[];
       cert?: Express.Multer.File[];
       p12?: Express.Multer.File[];
+      publicKey?: Express.Multer.File[];
     },
     @Body() body: { p12Password?: string },
   ) {
     const cfg = await this.pay.getConfig();
 
     if (files.p12?.[0]) {
-      const password = body.p12Password || cfg.mchId;
-      if (!password) throw new BadRequestException('请先填写商户号或提供 p12 密码');
-      const { privateKeyPem, certPem } = parseP12(files.p12[0].buffer, password);
-      cfg.privateKeyPem = privateKeyPem;
-      if (certPem) cfg.certPem = certPem;
+      const candidates = [...new Set([body.p12Password, cfg.mchId, ''].filter((v) => v !== undefined))] as string[];
+      let parsed: { privateKeyPem: string; certPem: string } | null = null;
+      let lastError = '';
+      for (const password of candidates) {
+        try {
+          parsed = parseP12(files.p12[0].buffer, password);
+          break;
+        } catch (e) {
+          lastError = (e as Error).message;
+        }
+      }
+      if (!parsed) {
+        throw new BadRequestException(
+          `p12 解析失败：密码不正确或文件格式不受支持（${lastError}）。p12 密码通常为商户号；若仍失败，请改用「PEM 私钥 apiclient_key.pem + 证书 apiclient_cert.pem」方式上传`,
+        );
+      }
+      cfg.privateKeyPem = parsed.privateKeyPem;
+      if (parsed.certPem) cfg.certPem = parsed.certPem;
     }
 
     if (files.privateKey?.[0]) {
@@ -115,6 +134,12 @@ export class PayAdminController {
       const pem = files.cert[0].buffer.toString('utf8');
       if (!pem.includes('CERTIFICATE')) throw new BadRequestException('证书文件不是有效的 PEM');
       cfg.certPem = pem;
+    }
+
+    if (files.publicKey?.[0]) {
+      const pem = files.publicKey[0].buffer.toString('utf8');
+      if (!pem.includes('PUBLIC KEY')) throw new BadRequestException('公钥文件不是有效的 PEM（pub_key.pem）');
+      cfg.publicKeyPem = pem;
     }
 
     if (cfg.certPem) {
