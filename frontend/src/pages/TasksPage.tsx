@@ -13,6 +13,8 @@ export interface TaskDto {
   cost: number
   createdAt: string
   hasPdf: boolean
+  unlocked: boolean
+  preview?: string
   progress?: { time: string; step: string; message: string; status: string }[]
 }
 

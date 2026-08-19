@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api, setAuth } from '../api'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { api, currentUser, setAuth } from '../api'
 
 export default function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -9,15 +9,24 @@ export default function AuthPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+  const [params] = useSearchParams()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const res = await api.post(`/auth/${mode}`, { email, password })
+      // 游客转正：携带游客 token，把游客期间生成的报告归并到账号
+      const guestToken = currentUser()?.isGuest ? localStorage.getItem('token') : null
+      const res = await api.post(`/auth/${mode}`, {
+        email,
+        password,
+        ...(guestToken ? { guestToken } : {}),
+      })
       setAuth(res.data.token, res.data.user)
-      navigate('/')
+      const from = params.get('from') || (location.state as any)?.from?.pathname || '/'
+      navigate(from, { replace: true })
     } catch (err: any) {
       setError(err.response?.data?.message ?? '请求失败')
     } finally {
@@ -60,7 +69,7 @@ export default function AuthPage() {
         </div>
       </form>
       <p className="mute" style={{ marginTop: 16 }}>
-        [-] 演示管理员：admin@example.com / admin123
+        [-] 注册后可保留游客期间生成的报告，购买套餐即可解锁完整报告
       </p>
     </div>
   )

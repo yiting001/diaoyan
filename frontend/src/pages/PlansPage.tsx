@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { api, billingTypeLabels } from '../api'
+import { api, billingTypeLabels, currentUser } from '../api'
 
 export interface PlanDto {
   id: number
@@ -55,6 +55,10 @@ export default function PlansPage() {
   const [paying, setPaying] = useState(false)
   const [params, setParams] = useSearchParams()
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const navigate = useNavigate()
+  const user = currentUser()
+  // 从报告页跳转过来时，支付成功后可返回解锁报告
+  const backTo = params.get('back')
 
   const loadSub = () => {
     api.get('/me/subscription').then((r) => setSub(r.data))
@@ -135,6 +139,11 @@ export default function PlansPage() {
   }
 
   const buy = (p: PlanDto) => {
+    if (user?.isGuest) {
+      // 游客需先注册登录再购买，避免套餐挂在临时账号上
+      navigate(`/login?from=${encodeURIComponent(`/plans${backTo ? `?back=${backTo}` : ''}`)}`)
+      return
+    }
     if (isWeChat) {
       // 公众号 JSAPI：先走网页授权取 openid
       window.location.href = `/api/pay/oauth?state=${p.id}`
@@ -176,6 +185,13 @@ export default function PlansPage() {
               <p className="mute">
                 {order.planName} · ¥{(order.amountFen / 100).toFixed(2)} · 单号 {order.outTradeNo}
               </p>
+              {backTo && (
+                <Link to={backTo}>
+                  <button className="btn" style={{ marginRight: 12 }}>
+                    返回解锁报告 →
+                  </button>
+                </Link>
+              )}
               <button className="btn btn-secondary" onClick={closeOrder}>
                 关闭
               </button>

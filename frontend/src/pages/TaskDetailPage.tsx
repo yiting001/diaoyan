@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { api } from '../api'
+import { useNavigate, useParams } from 'react-router-dom'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import { api, currentUser } from '../api'
 import PdfPreview from '../components/PdfPreview'
 import { statusLabels, type TaskDto } from './TasksPage'
 
@@ -27,7 +29,10 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<TaskDto | null>(null)
   const [events, setEvents] = useState<ProgressEvent[]>([])
   const [stopping, setStopping] = useState(false)
+  const [unlocking, setUnlocking] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
+  const user = currentUser()
 
   useEffect(() => {
     api.get(`/tasks/${id}`).then((r) => {
@@ -77,6 +82,22 @@ export default function TaskDetailPage() {
     }
   }
 
+  const unlock = async () => {
+    if (user?.isGuest) {
+      navigate(`/login?from=/tasks/${task.id}`)
+      return
+    }
+    setUnlocking(true)
+    try {
+      const r = await api.post(`/tasks/${task.id}/unlock`)
+      setTask(r.data)
+    } catch (err: any) {
+      if (err.response?.status === 403) navigate(`/plans?back=/tasks/${task.id}`)
+    } finally {
+      setUnlocking(false)
+    }
+  }
+
   return (
     <div className="section">
       <div className="section-title">
@@ -119,7 +140,7 @@ export default function TaskDetailPage() {
         </div>
       )}
 
-      {task.status === 'done' && task.hasPdf && (
+      {task.status === 'done' && task.unlocked && task.hasPdf && (
         <>
           <div style={{ margin: '16px 0', display: 'flex', gap: 12 }}>
             <a href={`${pdfUrl}&download=1`}>
@@ -131,6 +152,29 @@ export default function TaskDetailPage() {
           </div>
           <PdfPreview url={`/tasks/${task.id}/pdf`} />
         </>
+      )}
+
+      {task.status === 'done' && !task.unlocked && (
+        <div className="paywall">
+          <div
+            className="paywall-preview"
+            dangerouslySetInnerHTML={{
+              __html: DOMPurify.sanitize(marked.parse(task.preview ?? '', { async: false })),
+            }}
+          />
+          <div className="paywall-fade" />
+          <div className="paywall-cta">
+            <div className="paywall-title">[锁] 报告已生成，以上仅为开头预览</div>
+            <p className="mute">
+              {user?.isGuest
+                ? '注册登录并购买套餐后，即可查看完整报告并下载 PDF（游客期间的报告会保留到您的账号）'
+                : '购买套餐后即可解锁完整报告并下载 PDF'}
+            </p>
+            <button className="btn" onClick={unlock} disabled={unlocking}>
+              {unlocking ? '处理中…' : user?.isGuest ? '注册 / 登录解锁完整报告' : '付费解锁完整报告'}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

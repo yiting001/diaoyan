@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -19,6 +20,11 @@ import { Agent, Plan, ResearchTask, User } from '../entities';
 import { JwtAuthGuard } from '../auth/guards';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { ResearchService } from './research.service';
+
+// 无套餐用户可免费生成的报告数量（仅可预览开头，付费后解锁全文）
+const FREE_TASK_LIMIT = 3;
+// 未解锁报告可预览的正文字符数
+const PREVIEW_CHARS = 600;
 
 @Controller()
 @UseGuards(JwtAuthGuard)
@@ -72,12 +78,47 @@ export class TasksController {
     if (!agent) throw new NotFoundException('智能体不存在');
     const user = await this.users.findOneBy({ id: req.user.id });
     if (!user) throw new NotFoundException();
-    const usedCredit =
-      user.role === 'admin' ? false : await this.subscriptions.consumeForTask(user.id);
+    let usedCredit = false;
+    let unlocked = true;
+    if (user.role !== 'admin') {
+      const consumed = await this.subscriptions.tryConsumeForTask(user.id);
+      if (consumed === null) {
+        // 无套餐：允许免费生成但仅可预览开头，付费后解锁全文
+        const freeCount = await this.tasks.count({
+          where: { user: { id: user.id }, unlocked: false },
+        });
+        if (freeCount >= FREE_TASK_LIMIT) {
+          throw new ForbiddenException('免费体验次数已用完，请购买套餐后继续使用');
+        }
+        unlocked = false;
+      } else {
+        usedCredit = consumed;
+      }
+    }
     const task = await this.tasks.save(
-      this.tasks.create({ user, agent, productName: body.productName.trim(), usedCredit }),
+      this.tasks.create({
+        user,
+        agent,
+        productName: body.productName.trim(),
+        usedCredit,
+        unlocked,
+      }),
     );
     void this.research.run(task.id).catch(() => undefined);
+    return this.dto(task);
+  }
+
+  // 付费后解锁报告全文：消耗一次按次额度或年度套餐有效
+  @Post('tasks/:id/unlock')
+  async unlockTask(@Req() req: any, @Param('id') id: number) {
+    const task = await this.findOwned(req, id);
+    if (task.unlocked) return this.dto(task);
+    if (req.user.isGuest) throw new ForbiddenException('请先注册登录后再解锁报告');
+    const consumed = await this.subscriptions.tryConsumeForTask(req.user.id);
+    if (consumed === null) throw new ForbiddenException('请先购买套餐后解锁完整报告');
+    task.unlocked = true;
+    if (consumed) task.usedCredit = true;
+    await this.tasks.save(task);
     return this.dto(task);
   }
 
@@ -156,6 +197,9 @@ export class TasksController {
     if (task.status !== 'done' || !task.pdfPath || !fs.existsSync(task.pdfPath)) {
       throw new NotFoundException('报告尚未生成');
     }
+    if (!task.unlocked && req.user.role !== 'admin') {
+      throw new ForbiddenException('请付费解锁后查看完整报告');
+    }
     const filename = encodeURIComponent(`${task.productName}-调研报告.pdf`);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
@@ -184,6 +228,9 @@ export class TasksController {
       cost: t.cost,
       createdAt: t.createdAt,
       hasPdf: t.status === 'done' && !!t.pdfPath,
+      unlocked: t.unlocked,
+      preview:
+        t.status === 'done' && !t.unlocked ? (t.markdown || '').slice(0, PREVIEW_CHARS) : '',
       progress: (() => {
         try {
           return JSON.parse(t.progress || '[]');

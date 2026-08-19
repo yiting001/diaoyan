@@ -52,6 +52,13 @@ export class SubscriptionsService {
 
   // 提交任务前校验并扣减额度；返回是否消耗了一次按次额度
   async consumeForTask(userId: number): Promise<boolean> {
+    const consumed = await this.tryConsumeForTask(userId);
+    if (consumed === null) throw new ForbiddenException('请先购买套餐后再使用智能体');
+    return consumed;
+  }
+
+  // 尝试扣减额度：年度有效返回 false，扣减按次额度返回 true，无权益返回 null（不抛错）
+  async tryConsumeForTask(userId: number): Promise<boolean | null> {
     const sub = await this.subs.findOne({ where: { user: { id: userId } } });
     if (sub?.expiresAt && new Date(sub.expiresAt).getTime() > Date.now()) {
       return false;
@@ -61,7 +68,7 @@ export class SubscriptionsService {
       await this.subs.save(sub);
       return true;
     }
-    throw new ForbiddenException('请先购买套餐后再使用智能体');
+    return null;
   }
 
   // 任务失败/停止时退回按次额度

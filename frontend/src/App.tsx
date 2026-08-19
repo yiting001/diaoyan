@@ -1,6 +1,6 @@
 import React from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { currentUser, logout } from './api'
+import { currentUser, ensureAuth, logout } from './api'
 import AuthPage from './pages/AuthPage'
 import HomePage from './pages/HomePage'
 import TasksPage from './pages/TasksPage'
@@ -17,6 +17,7 @@ import AdminUsersPage from './pages/admin/AdminUsersPage'
 
 function Nav() {
   const user = currentUser()
+  const isGuest = !user || user.isGuest
   const [open, setOpen] = React.useState(false)
   const location = useLocation()
   React.useEffect(() => {
@@ -42,19 +43,33 @@ function Nav() {
             </>
           )}
           <div className="nav-user-mobile">
-            <NavLink to="/account" className="mute">
-              {user?.email}
-            </NavLink>
-            <button className="btn btn-secondary btn-sm" onClick={logout}>
-              退出
-            </button>
+            {isGuest ? (
+              <NavLink to="/login">登录 / 注册</NavLink>
+            ) : (
+              <>
+                <NavLink to="/account" className="mute">
+                  {user?.email}
+                </NavLink>
+                <button className="btn btn-secondary btn-sm" onClick={logout}>
+                  退出
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="nav-user">
-          <NavLink to="/account">{user?.email}</NavLink>
-          <button className="btn btn-secondary btn-sm" onClick={logout}>
-            退出
-          </button>
+          {isGuest ? (
+            <NavLink to="/login">
+              <button className="btn btn-sm">登录 / 注册</button>
+            </NavLink>
+          ) : (
+            <>
+              <NavLink to="/account">{user?.email}</NavLink>
+              <button className="btn btn-secondary btn-sm" onClick={logout}>
+                退出
+              </button>
+            </>
+          )}
         </div>
         <button className="nav-toggle" aria-label="菜单" onClick={() => setOpen((v) => !v)}>
           {open ? '[x]' : '[≡]'}
@@ -78,8 +93,24 @@ function Footer() {
 function Protected({ children, admin }: { children: React.ReactNode; admin?: boolean }) {
   const user = currentUser()
   const location = useLocation()
-  if (!user) return <Navigate to="/login" state={{ from: location }} replace />
+  if (!user || user.isGuest) return <Navigate to="/login" state={{ from: location }} replace />
   if (admin && user.role !== 'admin') return <Navigate to="/" replace />
+  return (
+    <>
+      <Nav />
+      <div className="container">{children}</div>
+      <Footer />
+    </>
+  )
+}
+
+// 免登录页面：没有账号时自动创建游客会话
+function Open({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = React.useState(!!currentUser())
+  React.useEffect(() => {
+    if (!ready) void ensureAuth().then(() => setReady(true))
+  }, [ready])
+  if (!ready) return null
   return (
     <>
       <Nav />
@@ -93,10 +124,10 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<AuthPage />} />
-      <Route path="/" element={<Protected><HomePage /></Protected>} />
-      <Route path="/tasks" element={<Protected><TasksPage /></Protected>} />
-      <Route path="/tasks/:id" element={<Protected><TaskDetailPage /></Protected>} />
-      <Route path="/plans" element={<Protected><PlansPage /></Protected>} />
+      <Route path="/" element={<Open><HomePage /></Open>} />
+      <Route path="/tasks" element={<Open><TasksPage /></Open>} />
+      <Route path="/tasks/:id" element={<Open><TaskDetailPage /></Open>} />
+      <Route path="/plans" element={<Open><PlansPage /></Open>} />
       <Route path="/account" element={<Protected><AccountPage /></Protected>} />
       <Route path="/admin/agents" element={<Protected admin><AdminAgentsPage /></Protected>} />
       <Route path="/admin/providers" element={<Protected admin><AdminProvidersPage /></Protected>} />

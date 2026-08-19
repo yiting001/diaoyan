@@ -817,3 +817,42 @@ td {
     grid-template-columns: 1fr;
   }
 }
+
+/* paywall：未解锁报告仅展示开头预览 + 付费解锁提示 */
+.paywall {
+  position: relative;
+  margin-top: 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.paywall-preview {
+  padding: 20px 24px 0;
+  max-height: 320px;
+  overflow: hidden;
+}
+.paywall-preview h1,
+.paywall-preview h2,
+.paywall-preview h3 {
+  font-size: 18px;
+}
+.paywall-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 148px;
+  height: 140px;
+  background: linear-gradient(rgba(253, 252, 252, 0), var(--canvas));
+  pointer-events: none;
+}
+.paywall-cta {
+  position: relative;
+  padding: 20px 24px 24px;
+  text-align: center;
+  background: var(--surface-soft);
+  border-top: 1px solid var(--hairline);
+}
+.paywall-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}

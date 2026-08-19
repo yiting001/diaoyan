@@ -14,7 +14,12 @@ api.interceptors.response.use(
     if (err.response?.status === 401 && location.pathname !== '/login') {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      location.href = '/login'
+      if (location.pathname.startsWith('/admin') || location.pathname === '/account') {
+        location.href = '/login'
+      } else {
+        // 游客 token 失效：刷新后自动重新创建游客会话
+        location.reload()
+      }
     }
     return Promise.reject(err)
   },
@@ -24,6 +29,7 @@ export interface AuthUser {
   id: number
   email: string
   role: 'user' | 'admin'
+  isGuest?: boolean
 }
 
 export function currentUser(): AuthUser | null {
@@ -39,7 +45,16 @@ export function setAuth(token: string, user: AuthUser) {
 export function logout() {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
-  location.href = '/login'
+  location.href = '/'
+}
+
+// 未登录时自动创建游客会话，打开即可使用
+export async function ensureAuth(): Promise<AuthUser> {
+  const existing = currentUser()
+  if (existing && localStorage.getItem('token')) return existing
+  const res = await api.post('/auth/guest')
+  setAuth(res.data.token, res.data.user)
+  return res.data.user
 }
 
 export const billingTypeLabels: Record<string, string> = {

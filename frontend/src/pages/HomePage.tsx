@@ -66,7 +66,7 @@ export default function HomePage() {
   return (
     <div className="home">
       <div className="home-greeting">
-        {greeting()}，{user?.email?.split('@')[0] ?? '投资者'}！
+        {greeting()}，{user && !user.isGuest ? user.email.split('@')[0] : '投资者'}！
       </div>
       <div className="home-tagline">企业战略和价值投资双重视角</div>
 
@@ -77,7 +77,7 @@ export default function HomePage() {
           value={productName}
           onChange={(e) => setProductName(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="输入产品名称，智能体自动调研并生成 PDF 报告，例如：小米SU7、iPhone 16、Notion…"
+          placeholder="输入要调研的品牌或公司，智能体自动调研并生成报告，例如：小米、五粮液、宁德时代…"
         />
         <div className="prompt-toolbar">
           <div className="prompt-tools">

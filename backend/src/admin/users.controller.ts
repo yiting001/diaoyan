@@ -36,7 +36,8 @@ export class UsersController {
 
   @Get()
   async list() {
-    const users = await this.users.find({ order: { id: 'ASC' } });
+    // 游客账号不在用户管理中展示
+    const users = await this.users.find({ where: { isGuest: false }, order: { id: 'ASC' } });
     const subs = await this.subs.find();
     const taskCounts = await this.tasks
       .createQueryBuilder('t')

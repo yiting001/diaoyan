@@ -22,6 +22,10 @@ export class User {
   @Column({ default: 'user' })
   role: 'user' | 'admin';
 
+  // 游客账号（免登录体验，注册后升级为正式账号）
+  @Column({ default: false })
+  isGuest: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }
@@ -272,6 +276,10 @@ export class ResearchTask {
   // 本任务是否消耗了一次按次套餐额度（失败/停止时退回）
   @Column({ default: false })
   usedCredit: boolean;
+
+  // 是否已解锁全文（无套餐生成的报告仅可预览开头，付费后解锁）
+  @Column({ default: true })
+  unlocked: boolean;
 
   @Column('int', { default: 0 })
   inputTokens: number;
