@@ -14,11 +14,16 @@ import AdminPlansPage from './pages/admin/AdminPlansPage'
 
 function Nav() {
   const user = currentUser()
+  const [open, setOpen] = React.useState(false)
+  const location = useLocation()
+  React.useEffect(() => {
+    setOpen(false)
+  }, [location.pathname])
   return (
     <div className="nav">
       <div className="nav-inner">
         <span className="wordmark">{'█▀█ █▀▀ █▀ █▀▀ █▀█ █▀█ █▀▀ █░█\n█▀▄ ██▄ ▄█ ██▄ █▀█ █▀▄ █▄▄ █▀█'}</span>
-        <div className="nav-links">
+        <div className={`nav-links ${open ? 'open' : ''}`}>
           <NavLink to="/">智能体</NavLink>
           <NavLink to="/tasks">我的报告</NavLink>
           <NavLink to="/plans">套餐</NavLink>
@@ -31,6 +36,12 @@ function Nav() {
               <NavLink to="/admin/plans">套餐管理</NavLink>
             </>
           )}
+          <div className="nav-user-mobile">
+            <span className="mute">{user?.email}</span>
+            <button className="btn btn-secondary btn-sm" onClick={logout}>
+              退出
+            </button>
+          </div>
         </div>
         <div className="nav-user">
           <span>{user?.email}</span>
@@ -38,6 +49,9 @@ function Nav() {
             退出
           </button>
         </div>
+        <button className="nav-toggle" aria-label="菜单" onClick={() => setOpen((v) => !v)}>
+          {open ? '[x]' : '[≡]'}
+        </button>
       </div>
     </div>
   )
