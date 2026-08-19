@@ -17,6 +17,19 @@ import { computeCost, invokeLlm } from './llm';
 import { renderPdf } from './pdf';
 import { bochaWebSearch, formatSearchResults } from '../search/bocha';
 
+export interface ProgressEvent {
+  time: string;
+  step: string;
+  message: string;
+  status: 'running' | 'done' | 'failed' | 'stopped';
+}
+
+class TaskStoppedError extends Error {
+  constructor() {
+    super('任务已被用户停止');
+  }
+}
+
 const ResearchState = Annotation.Root({
   productName: Annotation<string>,
   searchContext: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
@@ -32,6 +45,8 @@ const ResearchState = Annotation.Root({
 @Injectable()
 export class ResearchService {
   private logger = new Logger(ResearchService.name);
+  private listeners = new Map<number, Set<(e: ProgressEvent) => void>>();
+  private stopRequests = new Set<number>();
 
   constructor(
     @InjectRepository(ResearchTask) private tasks: Repository<ResearchTask>,
@@ -40,6 +55,19 @@ export class ResearchService {
     @InjectRepository(UsageRecord) private usage: Repository<UsageRecord>,
     @InjectRepository(SearchSetting) private searchSettings: Repository<SearchSetting>,
   ) {}
+
+  subscribe(taskId: number, fn: (e: ProgressEvent) => void) {
+    if (!this.listeners.has(taskId)) this.listeners.set(taskId, new Set());
+    this.listeners.get(taskId)!.add(fn);
+    return () => {
+      this.listeners.get(taskId)?.delete(fn);
+      if (this.listeners.get(taskId)?.size === 0) this.listeners.delete(taskId);
+    };
+  }
+
+  requestStop(taskId: number) {
+    this.stopRequests.add(taskId);
+  }
 
   async run(taskId: number) {
     const task = await this.tasks.findOne({ where: { id: taskId } });
@@ -67,6 +95,23 @@ export class ResearchService {
 
     let totalIn = 0;
     let totalOut = 0;
+    const events: ProgressEvent[] = [];
+
+    const progress = async (
+      step: string,
+      message: string,
+      status: ProgressEvent['status'] = 'running',
+    ) => {
+      const e: ProgressEvent = { time: new Date().toISOString(), step, message, status };
+      events.push(e);
+      task.progress = JSON.stringify(events);
+      await this.tasks.save(task);
+      this.listeners.get(task.id)?.forEach((fn) => fn(e));
+    };
+
+    const checkStopped = () => {
+      if (this.stopRequests.has(task.id)) throw new TaskStoppedError();
+    };
 
     const callLlm = async (nodeName: string, prompt: string) => {
       const startedAt = new Date();
@@ -119,6 +164,7 @@ export class ResearchService {
       const setting = (await this.searchSettings.find({ take: 1 }))[0];
       if (!setting?.enabled || !setting.apiKey) return {};
       const startedAt = new Date();
+      await progress('web_search', '正在联网搜索最新资料（博查AI）…');
       try {
         const items = await bochaWebSearch(
           setting.apiKey,
@@ -140,6 +186,7 @@ export class ResearchService {
             output: searchContext.slice(0, 4000),
           }),
         );
+        await progress('web_search', `搜索完成，获取到 ${items.length} 条最新资料`, 'done');
         return { searchContext, references };
       } catch (e: any) {
         await this.spans.save(
@@ -154,6 +201,7 @@ export class ResearchService {
           }),
         );
         this.logger.warn(`任务 ${task.id} 搜索失败，降级为无搜索模式: ${e?.message ?? e}`);
+        await progress('web_search', '联网搜索失败，将在不使用搜索资料的情况下继续调研', 'failed');
         return {};
       }
     };
@@ -164,6 +212,8 @@ export class ResearchService {
         : '';
 
     const outlineNode = async (state: typeof ResearchState.State) => {
+      checkStopped();
+      await progress('outline', '正在规划报告章节大纲…');
       const prompt = `${agent.outlinePrompt}\n[OUTLINE]\n产品：${state.productName}\n${withContext(state)}请直接输出章节标题列表，每行一个，不要编号。`;
       const text = await callLlm('outline', prompt);
       const outline = text
@@ -171,15 +221,20 @@ export class ResearchService {
         .map((l) => l.replace(/^[-*\d.\s\[\]+]+/, '').trim())
         .filter(Boolean)
         .slice(0, 8);
+      await progress('outline', `大纲完成，共 ${outline.length} 个章节：${outline.join('、')}`, 'done');
       return { outline };
     };
 
     const sectionsNode = async (state: typeof ResearchState.State) => {
       const sections: string[] = [];
-      for (const title of state.outline) {
+      for (let i = 0; i < state.outline.length; i++) {
+        const title = state.outline[i];
+        checkStopped();
+        await progress('section', `正在撰写第 ${i + 1}/${state.outline.length} 章：${title}…`);
         const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${withContext(state)}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。`;
         const text = await callLlm(`section:${title}`, prompt);
         sections.push(`## ${title}\n\n${text}`);
+        await progress('section', `第 ${i + 1}/${state.outline.length} 章「${title}」撰写完成`, 'done');
       }
       return { sections };
     };
@@ -219,9 +274,12 @@ export class ResearchService {
     try {
       task.status = 'running';
       await this.tasks.save(task);
+      await progress('start', `开始调研「${task.productName}」（智能体：${agent.name}，模型：${provider.model}）`);
 
       const result = await graph.invoke({ productName: task.productName });
 
+      checkStopped();
+      await progress('pdf', '正在排版 HTML 报告并生成 PDF…');
       const pdfStart = new Date();
       const pdfPath = await renderPdf(
         `${task.productName} 产品调研报告`,
@@ -247,18 +305,28 @@ export class ResearchService {
       task.cost = computeCost(provider, totalIn, totalOut);
       task.status = 'done';
       await this.tasks.save(task);
+      await progress('done', '调研完成，PDF 报告已生成', 'done');
 
       trace.status = 'done';
     } catch (e: any) {
-      this.logger.error(`任务 ${task.id} 失败: ${e?.message ?? e}`);
-      task.status = 'failed';
-      task.error = String(e?.message ?? e).slice(0, 500);
       task.inputTokens = totalIn;
       task.outputTokens = totalOut;
       task.cost = computeCost(provider, totalIn, totalOut);
-      await this.tasks.save(task);
-      trace.status = 'failed';
+      if (e instanceof TaskStoppedError) {
+        task.status = 'stopped';
+        await this.tasks.save(task);
+        await progress('stopped', '任务已按用户请求停止', 'stopped');
+        trace.status = 'stopped';
+      } else {
+        this.logger.error(`任务 ${task.id} 失败: ${e?.message ?? e}`);
+        task.status = 'failed';
+        task.error = String(e?.message ?? e).slice(0, 500);
+        await this.tasks.save(task);
+        await progress('failed', `调研失败：${task.error}`, 'failed');
+        trace.status = 'failed';
+      }
     } finally {
+      this.stopRequests.delete(task.id);
       trace.endedAt = new Date();
       await this.traces.save(trace);
     }

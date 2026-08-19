@@ -217,12 +217,16 @@ export class ResearchTask {
   @Column()
   productName: string;
 
-  // pending | running | done | failed
+  // pending | running | done | failed | stopped
   @Column({ default: 'pending' })
   status: string;
 
   @Column({ default: '' })
   error: string;
+
+  // JSON array of progress events: { time, step, message, status }
+  @Column('text', { default: '[]' })
+  progress: string;
 
   @Column('text', { default: '' })
   markdown: string;

@@ -13,6 +13,7 @@ export interface TaskDto {
   cost: number
   createdAt: string
   hasPdf: boolean
+  progress?: { time: string; step: string; message: string; status: string }[]
 }
 
 export const statusLabels: Record<string, string> = {
@@ -20,6 +21,7 @@ export const statusLabels: Record<string, string> = {
   running: '调研中',
   done: '已完成',
   failed: '失败',
+  stopped: '已停止',
 }
 
 export default function TasksPage() {

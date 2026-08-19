@@ -276,6 +276,51 @@ td {
 .status-failed {
   color: var(--danger);
 }
+.status-stopped {
+  color: var(--mute);
+}
+
+.progress-log {
+  margin: 16px 0;
+  padding: 12px 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+.progress-line {
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+  align-items: baseline;
+}
+.progress-time {
+  color: var(--mute);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.progress-icon {
+  flex-shrink: 0;
+}
+.progress-done {
+  color: var(--success);
+}
+.progress-failed {
+  color: var(--danger);
+}
+.progress-stopped {
+  color: var(--mute);
+}
+.blink {
+  animation: blink 1.2s step-end infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.35;
+  }
+}
 
 .mute {
   color: var(--mute);

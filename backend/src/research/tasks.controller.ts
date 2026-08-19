@@ -78,6 +78,64 @@ export class TasksController {
     return this.dto(task);
   }
 
+  @Post('tasks/:id/stop')
+  async stopTask(@Req() req: any, @Param('id') id: number) {
+    const task = await this.findOwned(req, id);
+    if (task.status !== 'pending' && task.status !== 'running') {
+      throw new BadRequestException('任务已结束，无法停止');
+    }
+    this.research.requestStop(task.id);
+    return { ok: true };
+  }
+
+  @Get('tasks/:id/events')
+  async events(@Req() req: any, @Param('id') id: number, @Res() res: Response) {
+    const task = await this.findOwned(req, id);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const send = (event: string, data: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    let events: unknown[] = [];
+    try {
+      events = JSON.parse(task.progress || '[]');
+    } catch {
+      events = [];
+    }
+    for (const e of events) send('progress', e);
+
+    const finish = async () => {
+      const latest = await this.tasks.findOne({ where: { id: task.id } });
+      send('status', this.dto(latest ?? task));
+      res.end();
+    };
+
+    if (task.status !== 'pending' && task.status !== 'running') {
+      await finish();
+      return;
+    }
+
+    const unsubscribe = this.research.subscribe(task.id, (e) => send('progress', e));
+    const timer = setInterval(() => {
+      void this.tasks.findOne({ where: { id: task.id } }).then((t) => {
+        if (t && t.status !== 'pending' && t.status !== 'running') {
+          clearInterval(timer);
+          unsubscribe();
+          send('status', this.dto(t));
+          res.end();
+        }
+      });
+    }, 2000);
+    res.on('close', () => {
+      clearInterval(timer);
+      unsubscribe();
+    });
+  }
+
   @Get('tasks/:id/pdf')
   async pdf(
     @Req() req: any,
@@ -117,6 +175,13 @@ export class TasksController {
       cost: t.cost,
       createdAt: t.createdAt,
       hasPdf: t.status === 'done' && !!t.pdfPath,
+      progress: (() => {
+        try {
+          return JSON.parse(t.progress || '[]');
+        } catch {
+          return [];
+        }
+      })(),
     };
   }
 }
