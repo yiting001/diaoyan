@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api'
+import MarkdownTextarea from '../../components/MarkdownTextarea'
 
 interface ProviderDto {
   id: number
@@ -94,22 +95,22 @@ export default function AdminAgentsPage() {
           <label>描述</label>
           <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <label>系统提示词（System Prompt）</label>
-          <textarea
-            rows={3}
+          <MarkdownTextarea
+            rows={5}
             value={form.systemPrompt}
-            onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
+            onChange={(v) => setForm({ ...form, systemPrompt: v })}
           />
           <label>大纲提示词（生成章节大纲）</label>
-          <textarea
-            rows={2}
+          <MarkdownTextarea
+            rows={4}
             value={form.outlinePrompt}
-            onChange={(e) => setForm({ ...form, outlinePrompt: e.target.value })}
+            onChange={(v) => setForm({ ...form, outlinePrompt: v })}
           />
           <label>章节提示词（撰写章节内容）</label>
-          <textarea
-            rows={2}
+          <MarkdownTextarea
+            rows={4}
             value={form.sectionPrompt}
-            onChange={(e) => setForm({ ...form, sectionPrompt: e.target.value })}
+            onChange={(v) => setForm({ ...form, sectionPrompt: v })}
           />
           <label>模型供应商</label>
           <select
