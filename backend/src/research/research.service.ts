@@ -424,7 +424,9 @@ export class ResearchService {
         (sectionContext
           ? `\n以下是针对本章主题定向搜索到的最新资料，请优先采用：\n${sectionContext}\n`
           : '');
-      const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${baseContext}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。只有在搜索资料和公开信息中确实找不到时才标注「${MISSING_MARK}」。`;
+      const otherChapters = state.outline.filter((t) => t !== title).join('、');
+      const styleRules = `【写作要求】行文简洁严谨、直入主题，不写套话和重复铺垫；数据和要点必须全面，优先用表格/要点列表呈现；只写本章职责范围内的内容，不要重复其他章节（${otherChapters}）会覆盖的内容，也不要在章内重复同一信息。`;
+      const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${styleRules}\n${baseContext}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。只有在搜索资料和公开信息中确实找不到时才标注「${MISSING_MARK}」。`;
       let text = await callLlm(`section:${title}`, prompt);
 
       // 若正文仍标注缺数据，针对缺失项生成补搜查询并重写一次
@@ -447,7 +449,7 @@ export class ResearchService {
         }
         if (extra.length > 0) {
           await progress('section', `[子智能体 ${i + 1}] 根据补充资料重新完善「${title}」…`);
-          const rewritePrompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${baseContext}\n以下是针对缺失数据补充搜索到的资料：\n${formatRefs(extra)}\n\n这是上一版草稿（部分数据标注了「${MISSING_MARK}」）：\n${text}\n\n请结合补充资料重新输出该章节完整内容（Markdown 格式，不要重复章节标题），尽量用补充资料中的真实数据替换「${MISSING_MARK}」，确实找不到的才保留标注。`;
+          const rewritePrompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${styleRules}\n${baseContext}\n以下是针对缺失数据补充搜索到的资料：\n${formatRefs(extra)}\n\n这是上一版草稿（部分数据标注了「${MISSING_MARK}」）：\n${text}\n\n请结合补充资料重新输出该章节完整内容（Markdown 格式，不要重复章节标题），尽量用补充资料中的真实数据替换「${MISSING_MARK}」，确实找不到的才保留标注。`;
           text = await callLlm(`section_rewrite:${title}`, rewritePrompt);
         }
       }
