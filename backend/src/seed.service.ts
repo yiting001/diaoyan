@@ -3,6 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Agent, Plan, User } from './entities';
+import {
+  FANFU_AGENT_DESCRIPTION,
+  FANFU_AGENT_NAME,
+  FANFU_OUTLINE_PROMPT,
+  FANFU_SECTION_PROMPT,
+  FANFU_SYSTEM_PROMPT,
+} from './research/fanfu-prompts';
 
 @Injectable()
 export class SeedService implements OnApplicationBootstrap {
@@ -25,12 +32,11 @@ export class SeedService implements OnApplicationBootstrap {
     if ((await this.agents.count()) === 0) {
       await this.agents.save(
         this.agents.create({
-          name: '产品调研专家',
-          description: '输入产品名称，自动生成完整的市场调研 PDF 报告',
-          systemPrompt:
-            '你是一名资深的产品市场调研分析师，输出内容专业、客观、结构化，使用简体中文。',
-          outlinePrompt: '请为下列产品设计一份市场调研报告的章节大纲（5-7 个章节）。',
-          sectionPrompt: '请撰写调研报告中指定章节的详细内容，条理清晰，可使用列表。',
+          name: FANFU_AGENT_NAME,
+          description: FANFU_AGENT_DESCRIPTION,
+          systemPrompt: FANFU_SYSTEM_PROMPT,
+          outlinePrompt: FANFU_OUTLINE_PROMPT,
+          sectionPrompt: FANFU_SECTION_PROMPT,
         }),
       );
     }
