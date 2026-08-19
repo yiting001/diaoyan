@@ -16,7 +16,7 @@ import {
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { computeCost, invokeLlm } from './llm';
 import { renderPdf } from './pdf';
-import { formatSearchResults, webSearch } from '../search/bocha';
+import { SearchResultItem, webSearch } from '../search/bocha';
 
 export interface ProgressEvent {
   time: string;
@@ -209,52 +209,85 @@ export class ResearchService {
       }
     };
 
-    const searchNode = async (state: typeof ResearchState.State) => {
-      const setting = (await this.searchSettings.find({ take: 1 }))[0];
-      if (!setting?.enabled) return {};
-      const activeKey = setting.provider === 'doubao' ? setting.doubaoApiKey : setting.apiKey;
-      if (!activeKey) return {};
-      const providerName = setting.provider === 'doubao' ? '豆包搜索' : '博查AI';
+    // 全局参考文献库：所有搜索（首轮 + 各章定向 + 缺失补搜）统一编号，保证引用 [n] 一致
+    const refList: SearchResultItem[] = [];
+    const refIndex = new Map<string, number>();
+    const addRefs = (items: SearchResultItem[]) => {
+      for (const it of items) {
+        if (!it.url || refIndex.has(it.url)) continue;
+        refIndex.set(it.url, refList.length + 1);
+        refList.push(it);
+      }
+    };
+    const formatRefs = (items: SearchResultItem[]) =>
+      items
+        .map(
+          (r) =>
+            `[${refIndex.get(r.url) ?? '?'}] ${r.name}（${r.siteName || r.url}${r.datePublished ? ` · ${r.datePublished.slice(0, 10)}` : ''}）\n${r.snippet}`,
+        )
+        .join('\n\n');
+
+    const searchSetting = (await this.searchSettings.find({ take: 1 }))[0];
+    const searchEnabled =
+      !!searchSetting?.enabled &&
+      !!(searchSetting.provider === 'doubao' ? searchSetting.doubaoApiKey : searchSetting.apiKey);
+    const searchProviderName = searchSetting?.provider === 'doubao' ? '豆包搜索' : '博查AI';
+
+    const doSearch = async (
+      spanName: string,
+      query: string,
+      count?: number,
+    ): Promise<SearchResultItem[]> => {
+      if (!searchEnabled) return [];
       const startedAt = new Date();
-      await progress('web_search', `正在联网搜索最新资料（${providerName}，最新优先）…`);
       try {
         const { items } = await webSearch(
-          setting,
-          `${state.productName} 最新 产品 调研 评测 市场`,
+          { ...searchSetting, resultCount: count ?? searchSetting.resultCount },
+          query,
         );
-        const searchContext = formatSearchResults(items);
-        const references = items
-          .map((r, i) => `${i + 1}. [${r.name}](${r.url})`)
-          .join('\n');
+        addRefs(items);
         await this.spans.save(
           this.spans.create({
             trace,
-            name: `web_search(${providerName})`,
+            name: `${spanName}(${searchProviderName})`,
             status: 'done',
             startedAt,
             endedAt: new Date(),
-            input: state.productName,
-            output: searchContext.slice(0, 4000),
+            input: query.slice(0, 500),
+            output: formatRefs(items).slice(0, 4000),
           }),
         );
-        await progress('web_search', `搜索完成，获取到 ${items.length} 条最新资料`, 'done');
-        return { searchContext, references };
+        return items;
       } catch (e: any) {
         await this.spans.save(
           this.spans.create({
             trace,
-            name: `web_search(${providerName})`,
+            name: `${spanName}(${searchProviderName})`,
             status: 'failed',
             startedAt,
             endedAt: new Date(),
-            input: state.productName,
+            input: query.slice(0, 500),
             output: String(e?.message ?? e).slice(0, 2000),
           }),
         );
-        this.logger.warn(`任务 ${task.id} 搜索失败，降级为无搜索模式: ${e?.message ?? e}`);
-        await progress('web_search', '联网搜索失败，将在不使用搜索资料的情况下继续调研', 'failed');
+        this.logger.warn(`任务 ${task.id} 搜索失败（${spanName}）: ${e?.message ?? e}`);
+        return [];
+      }
+    };
+
+    const searchNode = async (state: typeof ResearchState.State) => {
+      if (!searchEnabled) return {};
+      await progress('web_search', `正在联网搜索最新资料（${searchProviderName}，最新优先）…`);
+      const items = await doSearch(
+        'web_search',
+        `${state.productName} 最新 产品 调研 评测 市场`,
+      );
+      if (items.length === 0) {
+        await progress('web_search', '联网搜索未获得结果，各章节将单独定向搜索补充资料', 'done');
         return {};
       }
+      await progress('web_search', `搜索完成，获取到 ${items.length} 条最新资料`, 'done');
+      return { searchContext: formatRefs(items) };
     };
 
     const withContext = (state: typeof ResearchState.State) =>
@@ -315,14 +348,68 @@ export class ResearchService {
       return { outline };
     };
 
+    // 章节标题去掉编号/装饰符，提取用于搜索的关键词
+    const titleKeywords = (title: string) =>
+      title
+        .replace(/^第[一二三四五六七八九十\d]+章/, '')
+        .replace(/[★｜|【】\[\]（）()]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const MISSING_MARK = '未获取到公开数据';
+
     const sectionsNode = async (state: typeof ResearchState.State) => {
       const sections: string[] = [];
       for (let i = 0; i < state.outline.length; i++) {
         const title = state.outline[i];
+        const keywords = titleKeywords(title);
+        checkStopped();
+        // 每章先按本章主题定向搜索，避免只依赖首轮泛搜索导致具体指标缺数据
+        let sectionContext = '';
+        if (searchEnabled && keywords) {
+          await progress('web_search', `正在定向搜索「${keywords}」相关最新资料…`);
+          const items = await doSearch(
+            `search:${title}`,
+            `${state.productName} ${keywords} 最新数据`,
+            6,
+          );
+          if (items.length > 0) sectionContext = formatRefs(items);
+        }
         checkStopped();
         await progress('section', `正在撰写第 ${i + 1}/${state.outline.length} 章：${title}…`);
-        const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${withContext(state)}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。`;
-        const text = await callLlm(`section:${title}`, prompt);
+        const baseContext =
+          withContext(state) +
+          (sectionContext
+            ? `\n以下是针对本章主题定向搜索到的最新资料，请优先采用：\n${sectionContext}\n`
+            : '');
+        const prompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${baseContext}请输出该章节的调研内容（Markdown 格式，不要重复章节标题）。只有在搜索资料和公开信息中确实找不到时才标注「${MISSING_MARK}」。`;
+        let text = await callLlm(`section:${title}`, prompt);
+
+        // 若正文仍标注缺数据，针对缺失项生成补搜查询并重写一次
+        if (searchEnabled && text.includes(MISSING_MARK)) {
+          checkStopped();
+          const queriesText = await callLlm(
+            `missing_queries:${title}`,
+            `以下是「${state.productName}」调研报告中「${title}」章节的草稿，其中部分数据标注了「${MISSING_MARK}」。请针对这些缺失的数据项，输出最多 4 条用于联网搜索的中文查询词（每行一条，含企业名和具体指标名，不要序号和其他说明）：\n\n${text.slice(0, 3000)}`,
+          );
+          const queries = queriesText
+            .split('\n')
+            .map((l) => l.replace(/^[-*\d.\s．、]+/, '').trim())
+            .filter(Boolean)
+            .slice(0, 4);
+          const extra: SearchResultItem[] = [];
+          for (const q of queries) {
+            checkStopped();
+            await progress('web_search', `检测到缺失数据，正在补充搜索：${q}…`);
+            extra.push(...(await doSearch(`research:${title}`, q, 5)));
+          }
+          if (extra.length > 0) {
+            await progress('section', `根据补充资料重新完善第 ${i + 1} 章「${title}」…`);
+            const rewritePrompt = `${agent.sectionPrompt}\n产品：${state.productName}\n章节：${title}\n${baseContext}\n以下是针对缺失数据补充搜索到的资料：\n${formatRefs(extra)}\n\n这是上一版草稿（部分数据标注了「${MISSING_MARK}」）：\n${text}\n\n请结合补充资料重新输出该章节完整内容（Markdown 格式，不要重复章节标题），尽量用补充资料中的真实数据替换「${MISSING_MARK}」，确实找不到的才保留标注。`;
+            text = await callLlm(`section_rewrite:${title}`, rewritePrompt);
+          }
+        }
+
         sections.push(`## ${title}\n\n${stripDuplicateTitle(title, text)}`);
         await progress('section', `第 ${i + 1}/${state.outline.length} 章「${title}」撰写完成`, 'done');
       }
@@ -332,8 +419,10 @@ export class ResearchService {
     const composeNode = async (state: typeof ResearchState.State) => {
       const startedAt = new Date();
       let markdown = state.sections.join('\n\n');
-      if (state.references) {
-        markdown += `\n\n## 参考来源\n\n${state.references}`;
+      if (refList.length > 0) {
+        markdown += `\n\n## 参考来源\n\n${refList
+          .map((r, i) => `${i + 1}. [${r.name}](${r.url})`)
+          .join('\n')}`;
       }
       await this.spans.save(
         this.spans.create({
