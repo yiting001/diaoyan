@@ -10,6 +10,13 @@ import {
   FANFU_SECTION_PROMPT,
   FANFU_SYSTEM_PROMPT,
 } from './research/fanfu-prompts';
+import {
+  MINING_AGENT_DESCRIPTION,
+  MINING_AGENT_NAME,
+  MINING_OUTLINE_PROMPT,
+  MINING_SECTION_PROMPT,
+  MINING_SYSTEM_PROMPT,
+} from './research/fanfu-mining-prompts';
 
 @Injectable()
 export class SeedService implements OnApplicationBootstrap {
@@ -37,6 +44,17 @@ export class SeedService implements OnApplicationBootstrap {
           systemPrompt: FANFU_SYSTEM_PROMPT,
           outlinePrompt: FANFU_OUTLINE_PROMPT,
           sectionPrompt: FANFU_SECTION_PROMPT,
+        }),
+      );
+    }
+    if ((await this.agents.countBy({ name: MINING_AGENT_NAME })) === 0) {
+      await this.agents.save(
+        this.agents.create({
+          name: MINING_AGENT_NAME,
+          description: MINING_AGENT_DESCRIPTION,
+          systemPrompt: MINING_SYSTEM_PROMPT,
+          outlinePrompt: MINING_OUTLINE_PROMPT,
+          sectionPrompt: MINING_SECTION_PROMPT,
         }),
       );
     }
