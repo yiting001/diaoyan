@@ -24,6 +24,13 @@ import {
   ENERGY_SECTION_PROMPT,
   ENERGY_SYSTEM_PROMPT,
 } from './research/fanfu-energy-prompts';
+import {
+  SEVENTEEN_AGENT_DESCRIPTION,
+  SEVENTEEN_AGENT_NAME,
+  SEVENTEEN_OUTLINE_PROMPT,
+  SEVENTEEN_SECTION_PROMPT,
+  SEVENTEEN_SYSTEM_PROMPT,
+} from './research/fanfu-seventeen-prompts';
 
 @Injectable()
 export class SeedService implements OnApplicationBootstrap {
@@ -73,6 +80,17 @@ export class SeedService implements OnApplicationBootstrap {
           systemPrompt: ENERGY_SYSTEM_PROMPT,
           outlinePrompt: ENERGY_OUTLINE_PROMPT,
           sectionPrompt: ENERGY_SECTION_PROMPT,
+        }),
+      );
+    }
+    if ((await this.agents.countBy({ name: SEVENTEEN_AGENT_NAME })) === 0) {
+      await this.agents.save(
+        this.agents.create({
+          name: SEVENTEEN_AGENT_NAME,
+          description: SEVENTEEN_AGENT_DESCRIPTION,
+          systemPrompt: SEVENTEEN_SYSTEM_PROMPT,
+          outlinePrompt: SEVENTEEN_OUTLINE_PROMPT,
+          sectionPrompt: SEVENTEEN_SECTION_PROMPT,
         }),
       );
     }
