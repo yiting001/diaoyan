@@ -17,6 +17,13 @@ import {
   MINING_SECTION_PROMPT,
   MINING_SYSTEM_PROMPT,
 } from './research/fanfu-mining-prompts';
+import {
+  ENERGY_AGENT_DESCRIPTION,
+  ENERGY_AGENT_NAME,
+  ENERGY_OUTLINE_PROMPT,
+  ENERGY_SECTION_PROMPT,
+  ENERGY_SYSTEM_PROMPT,
+} from './research/fanfu-energy-prompts';
 
 @Injectable()
 export class SeedService implements OnApplicationBootstrap {
@@ -55,6 +62,17 @@ export class SeedService implements OnApplicationBootstrap {
           systemPrompt: MINING_SYSTEM_PROMPT,
           outlinePrompt: MINING_OUTLINE_PROMPT,
           sectionPrompt: MINING_SECTION_PROMPT,
+        }),
+      );
+    }
+    if ((await this.agents.countBy({ name: ENERGY_AGENT_NAME })) === 0) {
+      await this.agents.save(
+        this.agents.create({
+          name: ENERGY_AGENT_NAME,
+          description: ENERGY_AGENT_DESCRIPTION,
+          systemPrompt: ENERGY_SYSTEM_PROMPT,
+          outlinePrompt: ENERGY_OUTLINE_PROMPT,
+          sectionPrompt: ENERGY_SECTION_PROMPT,
         }),
       );
     }
